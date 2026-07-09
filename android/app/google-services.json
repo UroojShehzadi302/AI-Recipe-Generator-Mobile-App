@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "845885648760",
+    "project_id": "ai-recipe-generator-db27c",
+    "storage_bucket": "ai-recipe-generator-db27c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:845885648760:android:e53a89769a917208ff228d",
+        "android_client_info": {
+          "package_name": "com.example.ai_recipe_generator"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSxFwgjwBooVBvD_2CIeGIeFmx1rrSCoo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:845885648760:android:6138bb0aa5635e36ff228d",
+        "android_client_info": {
+          "package_name": "com.urooj.ai_recipe_generator"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSxFwgjwBooVBvD_2CIeGIeFmx1rrSCoo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
