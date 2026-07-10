@@ -30,193 +30,234 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: const Color(0xffF6F2EE),
 
       body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
 
-          padding: EdgeInsets.only(
-            left: 22,
-            right: 22,
-            top: 18,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
+              padding: EdgeInsets.only(
+                left: 22,
+                right: 22,
+                top: 18,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
 
-          child: Container(
-            padding: const EdgeInsets.all(18),
-
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(.06),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset("assets/images/logo.png", height: 60),
-
-                const SizedBox(height: 10),
-
-                const Text(
-                  "SIGN IN",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 30,
                 ),
 
-                const SizedBox(height: 5),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
 
-                Text(
-                  "Welcome back! Let's cook something delicious.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
+                      Image.asset("assets/images/logo.png", height: 80),
 
-                const SizedBox(height: 18),
+                      const SizedBox(height: 15),
 
-                CustomTextField(
-                  controller: emailController,
-                  hintText: "Email",
-                  icon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
-                ),
-
-                const SizedBox(height: 12),
-
-                CustomTextField(
-                  controller: passwordController,
-                  hintText: "Password",
-                  icon: Icons.lock_outline,
-                  isPassword: true,
-                ),
-
-                const SizedBox(height: 8),
-
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: Checkbox(
-                        value: rememberMe,
-                        activeColor: const Color(0xff8B5E3C),
-                        onChanged: (value) {
-                          setState(() {
-                            rememberMe = value!;
-                          });
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    const Text("Remember", style: TextStyle(fontSize: 13)),
-
-                    const Spacer(),
-
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        "Forgot Password?",
+                      const Text(
+                        "Welcome Back",
                         style: TextStyle(
-                          color: Color(0xff8B5E3C),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                CustomButton(text: "SIGN IN", onPressed: () {}),
-
-                const SizedBox(height: 10),
-
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        "OR",
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-
-                const SizedBox(height: 10),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-
-                  child: OutlinedButton.icon(
-                    onPressed: () {},
-
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xffDDD4CA)),
-
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-
-                    icon: const Icon(
-                      Icons.g_mobiledata,
-                      color: Colors.red,
-                      size: 28,
-                    ),
-
-                    label: const Text(
-                      "Continue with Google",
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      "Don't have an account?",
-                      style: TextStyle(fontSize: 13),
-                    ),
-
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        "Sign Up",
-                        style: TextStyle(
-                          color: Color(0xff8B5E3C),
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
+
+                      const SizedBox(height: 6),
+
+                      Text(
+                        "Sign in to continue cooking with AI",
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      Card(
+                        elevation: 5,
+                        shadowColor: Colors.black12,
+
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 16,
+                          ),
+
+                          child: Column(
+                            children: [
+                              CustomTextField(
+                                controller: emailController,
+                                label: "Email",
+                                icon: Icons.email_outlined,
+                                keyboardType: TextInputType.emailAddress,
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              CustomTextField(
+                                controller: passwordController,
+                                label: "Password",
+                                icon: Icons.lock_outline,
+                                isPassword: true,
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              Row(
+                                children: [
+                                  Transform.scale(
+                                    scale: 0.85,
+                                    child: Checkbox(
+                                      value: rememberMe,
+                                      activeColor: const Color(0xff8B5E3C),
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          rememberMe = value!;
+                                        });
+                                      },
+                                    ),
+                                  ),
+
+                                  const Text(
+                                    "Remember Me",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+
+                                  const Spacer(),
+
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: const Size(0, 0),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () {},
+                                    child: const Text(
+                                      "Forgot Password?",
+                                      style: TextStyle(
+                                        color: Color(0xff8B5E3C),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 8),
+
+                              CustomButton(text: "SIGN IN", onPressed: () {}),
+
+                              const SizedBox(height: 16),
+
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Divider(color: Colors.grey.shade300),
+                                  ),
+
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    child: Text("OR"),
+                                  ),
+
+                                  Expanded(
+                                    child: Divider(color: Colors.grey.shade300),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: OutlinedButton(
+                                  onPressed: () {},
+
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    side: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Image.asset(
+                                        "assets/icons/google.png",
+                                        width: 22,
+                                        height: 22,
+                                      ),
+
+                                      const SizedBox(width: 12),
+
+                                      const Text(
+                                        "Continue with Google",
+                                        style: TextStyle(
+                                          color: Colors.black87,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    "Don't have an account?",
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+
+                                  TextButton(
+                                    onPressed: () {},
+
+                                    child: const Text(
+                                      "Sign Up",
+                                      style: TextStyle(
+                                        color: Color(0xff8B5E3C),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const Spacer(),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
