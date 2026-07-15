@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
 import 'ai_hub_screen.dart';
 import 'favorites_screen.dart';
@@ -29,12 +30,16 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    // Warm the favorites list so Home hearts reflect saved state immediately.
+    // Warm the favorites list so Home hearts reflect saved state immediately,
+    // and initialize push notifications (permission + FCM token + listeners).
+    // Both run after the first frame so construction stays Firebase-free.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final uid = context.read<AuthProvider>().uid;
       if (uid != null) {
         context.read<RecipeProvider>().loadFavorites(uid);
       }
+      context.read<NotificationProvider>().init();
     });
   }
 

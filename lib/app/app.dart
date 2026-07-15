@@ -5,6 +5,7 @@ import '../core/config/ai_config.dart';
 import '../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/chat_repository.dart';
@@ -16,6 +17,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/gemini_direct_service.dart';
 import '../services/meal_db_service.dart';
+import '../services/notification_service.dart';
 import '../services/unconfigured_ai_service.dart';
 
 /// Root widget: builds the dependency graph, provides the state layer, and
@@ -36,6 +38,7 @@ class RecipeGeneratorApp extends StatelessWidget {
     final authService = AuthService();
     final firestoreService = FirestoreService();
     final mealDbService = MealDbService();
+    final notificationService = NotificationService();
 
     // AI: use the direct Gemini Developer API when a key is configured;
     // otherwise a no-op service so AI features degrade to a friendly "coming
@@ -66,6 +69,11 @@ class RecipeGeneratorApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<ChatProvider>(
           create: (_) => ChatProvider(chatRepository),
+        ),
+        ChangeNotifierProvider<NotificationProvider>(
+          // Construction is Firebase-free; init() is called after the first
+          // frame by the widget tree (see MainShell) so tests stay safe.
+          create: (_) => NotificationProvider(notificationService),
         ),
       ],
       child: MaterialApp(
