@@ -96,6 +96,11 @@ class NotificationProvider extends ChangeNotifier {
 
   /// Adds a notification to the top of the inbox, de-duplicating by id.
   void _add(AppNotification notification) {
+    debugPrint(
+      'FCM message received (foreground/open): '
+      'title="${notification.title}" body="${notification.body}" '
+      'id="${notification.id}"',
+    );
     if (notification.id.isNotEmpty &&
         _items.any((AppNotification n) => n.id == notification.id)) {
       return;
