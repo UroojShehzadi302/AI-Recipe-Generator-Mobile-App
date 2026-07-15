@@ -8,6 +8,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
+import '../core/utils/image_source.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/app_text_field.dart';
 import '../core/widgets/primary_button.dart';
@@ -50,10 +51,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickImage() async {
     try {
+      // Downscale hard: the avatar is stored base64 in Firestore, so keep it
+      // small (well under the 1 MB document limit) while staying crisp at
+      // avatar sizes.
       final XFile? picked = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 800,
-        imageQuality: 85,
+        maxWidth: 400,
+        maxHeight: 400,
+        imageQuality: 70,
       );
       if (picked != null && mounted) {
         setState(() => _pickedAvatar = File(picked.path));
@@ -182,8 +187,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               backgroundColor: AppColors.surface,
               backgroundImage: hasPicked
                   ? FileImage(_pickedAvatar!)
-                  : (hasRemote ? NetworkImage(photoUrl!) : null)
-                      as ImageProvider<Object>?,
+                  : imageProviderFromUrl(photoUrl),
               child: (hasPicked || hasRemote)
                   ? null
                   : const Icon(Icons.person, size: 52, color: AppColors.secondary),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_shadows.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/image_source.dart';
 
 /// A circular profile avatar with a subtle border and shadow.
 ///
@@ -45,11 +46,12 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     }
   }
 
-  bool get _hasImage =>
-      widget.imageUrl != null && widget.imageUrl!.isNotEmpty && !_imageFailed;
+  ImageProvider<Object>? get _image =>
+      _imageFailed ? null : imageProviderFromUrl(widget.imageUrl);
 
   @override
   Widget build(BuildContext context) {
+    final ImageProvider<Object>? image = _image;
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
@@ -59,15 +61,15 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       child: CircleAvatar(
         radius: widget.radius,
         backgroundColor: AppColors.surface,
-        backgroundImage: _hasImage ? NetworkImage(widget.imageUrl!) : null,
-        onBackgroundImageError: _hasImage
+        backgroundImage: image,
+        onBackgroundImageError: image != null
             ? (Object error, StackTrace? stackTrace) {
                 if (mounted) {
                   setState(() => _imageFailed = true);
                 }
               }
             : null,
-        child: _hasImage ? null : _buildFallback(),
+        child: image == null ? _buildFallback() : null,
       ),
     );
   }
