@@ -30,11 +30,12 @@ lib/
     theme/    app_colors, app_dimensions, app_text_styles, app_durations, app_shadows, app_theme
     constants/ app_assets, app_strings, sample_recipes   # sample_recipes = placeholder data (TODO: real feed M5)
     config/   ai_config                # Gemini key+model; AiConfig.load() reads bundled env.json at RUNTIME
-    utils/    validators
+    utils/    validators, responsive   # responsive = AppBreakpoints + BuildContext ext (grid cols, page padding, rail sizes)
     error/    failure, error_mapper
     widgets/  primary_button, app_text_field, google_button, or_divider, section_title,
               loading_indicator, empty_state, app_error_view, profile_avatar,
-              category_chip, recipe_card, ai_assistant_card, markdown_text
+              category_chip, recipe_card, ai_assistant_card, markdown_text,
+              shimmer_loading   # in-house shimmer + RecipeCard/Rail/Grid skeletons (no package)
   models/       recipe_model (Recipe/Nutrition/Ingredient), user_model, chat_message, chat_session
   services/     auth_service, firestore_service,
                 ai_service (interface), gemini_direct_service (dev Gemini impl),
@@ -76,6 +77,7 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
   - **Build-blocker fixed:** `pubspec.yaml` had lost its `google_sign_in ^7.2.0` + `http` deps (imports failed → app wouldn't compile) and never listed `env.json` as an asset (AI silently fell back to "coming soon" on plain `flutter run`). All three restored.
 - ✅ M7 Recipe Detail (full page; a prior blank-body bug from a greedy `Center` in the bottom bar is fixed + guarded by test)
 - ✅ M8 Favorites & Saved (real Firestore reads/writes; hearts on Home + Detail; Favorites/Saved tabs)
+- ✅ Responsive UI + shimmer loading — `core/utils/responsive.dart` (breakpoints 600/1024; grids go 2→3→4 columns, page padding + rail card/height scale up on wider screens) applied to Home, Search, Categories, Favorites, Saved. Loading states use a dependency-free shimmer (`core/widgets/shimmer_loading.dart`: `Shimmer` + `RecipeCardSkeleton`/`RecipeRailSkeleton`/`RecipeGridSkeleton`) instead of plain spinners on Home rails, Search, and Categories. Tests: `test/responsive_shimmer_test.dart`.
 - ✅ Profile tab with working Logout; session-restore loads the user model
 - ✅ M6 AI Generate & M9 AI Chat — **implemented end-to-end** (backend + UI). Service: `GeminiDirectService` (direct Gemini REST over `http`); recipe generation uses JSON-mode (`responseSchema` → `Recipe`), chat scoped to cooking; verified live. UI: `screens/ai_hub_screen.dart` = the "Ask AI" tab (index 2 in `main_shell`), a segmented **Generate | Chat** hub (per D1). Generate → prompt → `RecipeProvider.generate` → `RecipeDetailScreen` → Save. Chat → bubbles + typing dots + composer → `ChatProvider.sendMessage`. AI replies render markdown via `core/widgets/markdown_text.dart` (headings/bold/italic/code/lists — a lightweight token-styled renderer, no external package); the user's own bubbles stay plain text. **Chat history:** header has **New chat** + **History** actions; conversations persist per-user to `users/{uid}/chats/{chatId}` (+ `messages` subcollection) via `ChatRepository` (createChat/touchChat/getChats/getMessages/deleteChat/generateTitle) and `ChatProvider` (newChat/openChat/loadSessions/deleteSession); history shown in a bottom sheet (`_HistorySheet`). **Titles are AI-generated:** a new chat gets a provisional truncated-prompt title, then `AiService.generateTitle` (extra Gemini call, `_titleSystemPrompt`) upgrades it from the first exchange — runs *after* the reply is shown so it adds no perceived latency; best-effort (keeps provisional title on failure). Persistence is best-effort and requires sign-in (uid); signed-out chat still works but isn't saved. `ChatSession` model = `models/chat_session.dart`. Key in git-ignored `env.json`; **model = `gemini-flash-latest`** (pinned `gemini-2.0-flash` has **zero free-tier quota** on this project — use the `-latest` alias). M3 (full backend/Functions) deferred to production.
 
@@ -107,7 +109,7 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
 The code stack is complete (`services/auth_service.dart` `signInWithGoogle` + `kGoogleServerClientId`, `repositories/auth_repository.dart`, `providers/auth_provider.dart`, Login/Register handlers navigate on success) AND the owner has completed the console side: Google enabled, debug SHA-1 added, and the **new `google-services.json` (with `oauth_client` entries) is in `android/app/`**. Should now work on-device — **owner to smoke-test the button and confirm** (ask for the exact on-screen/console text if it errors). Cancellation returns `null` from the repo → provider stays idle, no error snackbar.
 
 ## Next unblocked work
-Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories are all **done**. `flutter analyze` = 0 (3 accepted hints), `flutter test` = **55 pass**. Remaining:
+Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading are all **done**. `flutter analyze` = 0 (3 accepted hints), `flutter test` = **60 pass**. Remaining:
 
 **Owner-only (blockers, not code):**
 - **Deploy** the authored `firestore.rules` (see Firebase console state) — the app stays on open **test-mode** until then. ⚠️ security gap. `firebase login && firebase deploy --only firestore:rules,firestore:indexes --project ai-recipe-generator-db27c`.

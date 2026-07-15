@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 import '../core/constants/sample_recipes.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
+import '../core/utils/responsive.dart';
 import '../core/widgets/ai_assistant_card.dart';
 import '../core/widgets/category_chip.dart';
 import '../core/widgets/loading_indicator.dart';
 import '../core/widgets/profile_avatar.dart';
 import '../core/widgets/recipe_card.dart';
 import '../core/widgets/section_title.dart';
+import '../core/widgets/shimmer_loading.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
@@ -110,7 +112,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 context.read<RecipeProvider>().retryHomeCatalog(),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              padding: EdgeInsets.fromLTRB(
+                context.pagePadding,
+                12,
+                context.pagePadding,
+                24,
+              ),
               children: [
                 _header(greetingName),
                 const SizedBox(height: 20),
@@ -262,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (provider.homeCatalogStatus) {
       case LoadStatus.idle:
       case LoadStatus.loading:
-        return const _RailLoading();
+        return _railSkeleton();
       case LoadStatus.error:
         return _RailError(
           message: provider.homeCatalogError ?? 'Something went wrong.',
@@ -274,6 +281,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// A shimmering rail placeholder sized to the current screen.
+  Widget _railSkeleton() => RecipeRailSkeleton(
+        height: context.railHeight,
+        cardWidth: context.railCardWidth,
+      );
+
   /// The desi rail. Backed by the curated local set, so it shows as soon as it
   /// is populated — even if the network rails failed. Falls back to the loading
   /// strip only while the very first load is still in flight.
@@ -281,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (provider.desiRail.isNotEmpty) return _recipeRail(provider.desiRail);
     if (provider.homeCatalogStatus == LoadStatus.loading ||
         provider.homeCatalogStatus == LoadStatus.idle) {
-      return const _RailLoading();
+      return _railSkeleton();
     }
     return const _RailEmpty();
   }
@@ -289,13 +302,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _recipeRail(List<Recipe> recipes) {
     final recipeProvider = context.watch<RecipeProvider>();
     return SizedBox(
-      height: 212,
+      height: context.railHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: recipes.length,
         separatorBuilder: (_, _) => const SizedBox(width: 14),
         itemBuilder: (context, i) => RecipeCard(
           recipe: recipes[i],
+          width: context.railCardWidth,
           isFavorite: recipeProvider.isFavorite(recipes[i]),
           onTap: () => _openRecipe(recipes[i]),
           onFavorite: () => _toggleFavorite(recipes[i]),
@@ -319,16 +333,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-  }
-}
-
-/// Fixed-height placeholder shown while a Home rail loads.
-class _RailLoading extends StatelessWidget {
-  const _RailLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox(height: 212, child: LoadingIndicator());
   }
 }
 

@@ -6,11 +6,12 @@ import 'package:provider/provider.dart';
 import '../core/constants/sample_recipes.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
+import '../core/utils/responsive.dart';
 import '../core/widgets/app_error_view.dart';
 import '../core/widgets/category_chip.dart';
 import '../core/widgets/empty_state.dart';
-import '../core/widgets/loading_indicator.dart';
 import '../core/widgets/recipe_card.dart';
+import '../core/widgets/shimmer_loading.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
@@ -157,7 +158,7 @@ class _SearchScreenState extends State<SearchScreen> {
       case LoadStatus.idle:
         return _suggestions(provider);
       case LoadStatus.loading:
-        return const LoadingIndicator();
+        return RecipeGridSkeleton(columns: context.recipeGridColumns);
       case LoadStatus.error:
         return AppErrorView(
           message: provider.searchError ?? 'Something went wrong.',
@@ -315,8 +316,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final List<Recipe> results = provider.searchResults;
     return GridView.builder(
       padding: const EdgeInsets.only(bottom: 20),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: context.recipeGridColumns,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
         childAspectRatio: 0.74,
