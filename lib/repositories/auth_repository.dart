@@ -5,6 +5,7 @@
 // Firebase exceptions into domain [Failure]s and guarantees a [UserModel]
 // exists for every authenticated account.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,7 +15,6 @@ import '../core/error/error_mapper.dart';
 import '../core/error/failure.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
-import '../services/storage_service.dart';
 import 'user_repository.dart';
 
 /// Coordinates sign-in/registration with user-profile storage.
@@ -25,19 +25,13 @@ import 'user_repository.dart';
 class AuthRepository {
   final AuthService _authService;
   final UserRepository _userRepository;
-  final StorageService _storageService;
 
   /// Creates an [AuthRepository] with its collaborators injected.
-  ///
-  /// [storageService] defaults to a real [StorageService] (used for avatar
-  /// uploads); it is injectable for tests.
   AuthRepository({
     required AuthService authService,
     required UserRepository userRepository,
-    StorageService? storageService,
   })  : _authService = authService,
-        _userRepository = userRepository,
-        _storageService = storageService ?? StorageService();
+        _userRepository = userRepository;
 
   /// Streams the raw FirebaseAuth [User] (or `null` when signed out).
   Stream<User?> get authState => _authService.authStateChanges();
@@ -171,14 +165,14 @@ class AuthRepository {
   }
 
   /// Updates the signed-in user's display [name] and, when [avatarFile] is
-  /// given, uploads it as their avatar and updates the photo URL.
+  /// given, stores it as their avatar.
   ///
-  /// Persists to FirebaseAuth (displayName/photoURL) and the Firestore
-  /// `/users/{uid}` document, returning the refreshed [UserModel]. Throws an
-  /// [AuthFailure] when signed out, a [StorageFailure] when the avatar upload
-  /// fails (e.g. Cloud Storage not enabled / rules), and [UnknownFailure]
-  /// otherwise. The name change is applied before the upload, so a failed
-  /// upload does not silently drop a renamed profile.
+  /// The avatar is saved as a compressed **base64 `data:` URI inside the
+  /// Firestore user document** (free — no Cloud Storage / Blaze plan needed),
+  /// not uploaded to Cloud Storage. Persists the name to FirebaseAuth
+  /// (displayName) and the `/users/{uid}` document, returning the refreshed
+  /// [UserModel]. Throws [AuthFailure] when signed out, [StorageFailure] when
+  /// the image can't be read or is too large, and [UnknownFailure] otherwise.
   Future<UserModel> updateProfile({
     required String name,
     File? avatarFile,
@@ -191,34 +185,25 @@ class AuthRepository {
     final String trimmedName = name.trim();
 
     try {
-      // Upload the new avatar first (if any) so we can persist name + photo in
-      // one write; surfaces a clear message when Storage isn't available yet.
-      String? photoUrl;
-      if (avatarFile != null) {
-        try {
-          photoUrl = await _storageService.uploadAvatar(user.uid, avatarFile);
-        } catch (e) {
-          throw StorageFailure(ErrorMapper.generic(e));
-        }
-      }
+      final String? photoUrl =
+          avatarFile == null ? null : await _encodeAvatar(avatarFile);
 
+      // Only the name goes to FirebaseAuth — a base64 data: URI would exceed
+      // the photoURL length limit, so the avatar lives in Firestore only (the
+      // app reads the profile from Firestore, so it still shows everywhere).
       await user.updateDisplayName(trimmedName);
-      if (photoUrl != null) {
-        await user.updatePhotoURL(photoUrl);
-      }
 
       // Merge into the existing profile so server-maintained fields are kept.
-      final UserModel current =
-          await _userRepository.getUser(user.uid) ??
-              UserModel(
-                uid: user.uid,
-                email: user.email ?? '',
-                provider: user.providerData.any(
-                        (info) => info.providerId == 'google.com')
-                    ? 'google'
-                    : 'password',
-                emailVerified: user.emailVerified,
-              );
+      final UserModel current = await _userRepository.getUser(user.uid) ??
+          UserModel(
+            uid: user.uid,
+            email: user.email ?? '',
+            provider: user.providerData
+                    .any((info) => info.providerId == 'google.com')
+                ? 'google'
+                : 'password',
+            emailVerified: user.emailVerified,
+          );
       final UserModel updated = current.copyWith(
         uid: user.uid,
         name: trimmedName,
@@ -230,6 +215,28 @@ class AuthRepository {
       rethrow;
     } catch (e) {
       throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Reads [file] and returns a `data:image/jpeg;base64,...` URI for storing in
+  /// Firestore. Rejects images that would blow past Firestore's ~1 MB document
+  /// limit once base64-encoded (the picker already downscales, so this is a
+  /// safety net). Throws [StorageFailure] on read errors / oversize.
+  Future<String> _encodeAvatar(File file) async {
+    try {
+      final List<int> bytes = await file.readAsBytes();
+      // base64 inflates ~33%; cap raw bytes so the encoded string + the rest of
+      // the user doc stay under Firestore's 1 MB per-document limit.
+      if (bytes.length > 700 * 1024) {
+        throw const StorageFailure(
+          'That photo is too large. Please choose a smaller image.',
+        );
+      }
+      return 'data:image/jpeg;base64,${base64Encode(bytes)}';
+    } on Failure {
+      rethrow;
+    } catch (_) {
+      throw const StorageFailure();
     }
   }
 
