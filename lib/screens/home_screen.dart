@@ -173,9 +173,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _header(String greetingName) {
+    // Watch the user's photo + name so the avatar updates live after an
+    // Edit Profile change (the avatar is a base64 data: URI — ProfileAvatar
+    // renders it via imageProviderFromUrl).
+    final photoUrl = context.select<AuthProvider, String?>(
+      (p) => p.user?.photoUrl,
+    );
+    final fullName = context.select<AuthProvider, String>(
+      (p) => (p.user?.name ?? '').trim(),
+    );
     return Row(
       children: [
-        const ProfileAvatar(radius: 24, fallbackInitial: null),
+        ProfileAvatar(
+          radius: 24,
+          imageUrl: photoUrl,
+          fallbackInitial: fullName.isNotEmpty ? fullName[0] : null,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
