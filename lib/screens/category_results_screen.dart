@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/utils/responsive.dart';
 import '../core/widgets/app_error_view.dart';
 import '../core/widgets/empty_state.dart';
 import '../core/widgets/loading_indicator.dart';
 import '../core/widgets/recipe_card.dart';
+import '../core/widgets/shimmer_loading.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
@@ -147,7 +149,7 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
     switch (provider.categoryStatus) {
       case LoadStatus.idle:
       case LoadStatus.loading:
-        return const LoadingIndicator();
+        return RecipeGridSkeleton(columns: context.recipeGridColumns);
       case LoadStatus.error:
         return AppErrorView(
           message: provider.categoryError ?? 'Something went wrong.',
@@ -169,8 +171,8 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
     final List<Recipe> recipes = provider.categoryRecipes;
     return GridView.builder(
       padding: const EdgeInsets.only(bottom: 20),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: context.recipeGridColumns,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
         childAspectRatio: 0.74,

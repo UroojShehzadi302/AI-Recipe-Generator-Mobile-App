@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/utils/responsive.dart';
 import '../core/widgets/empty_state.dart';
 import '../core/widgets/recipe_card.dart';
 import '../providers/auth_provider.dart';
@@ -63,8 +64,8 @@ class _SavedScreenState extends State<SavedScreen> {
                   : GridView.builder(
                       padding: const EdgeInsets.only(bottom: 20),
                       gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
+                          SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: context.recipeGridColumns,
                         crossAxisSpacing: 14,
                         mainAxisSpacing: 14,
                         childAspectRatio: 0.74,
