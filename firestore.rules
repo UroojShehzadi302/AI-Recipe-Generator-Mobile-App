@@ -1,0 +1,75 @@
+rules_version = '2';
+
+// Firestore security rules for ai-recipe-generator-db27c.
+//
+// This is the real dev/prod ruleset that REPLACES the open test-mode rules
+// (`allow read, write: if request.auth != null`). It is deny-by-default:
+// only the paths matched below are accessible, and everything else is denied.
+//
+// Posture (see documents/backend_architecture.md §8):
+//   * Curated recipes (`/recipes`) and the cached home feed (`/home_feed`) are
+//     read-only to signed-in clients; only the Admin SDK / Cloud Functions may
+//     write them.
+//   * Everything under `/users/{uid}` is OWNER-ONLY: a user can read and write
+//     their own profile, favorites, generated recipes, and chat history
+//     (including chats/*/messages), and no one else's.
+//
+// DIVERGENCE FROM backend_architecture.md §8 (intentional, for the current
+// build): the doc's ideal rules additionally require App Check
+// (`request.app != null`) on every rule and make `generatedRecipes`, the user
+// doc's counters, and AI ("model") chat messages Function-written only. Those
+// constraints assume infrastructure that is NOT wired yet — App Check is not
+// enabled and the Cloud Functions (M3) are blocked, so the app writes these
+// documents directly from the client. Enforcing the doc's rules today would
+// deny the app's own legitimate reads/writes. When App Check + the Functions
+// land, tighten this file toward §8 (add `&& appCheckOk()`, flip generated
+// recipes and model messages to `allow write: if false`).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helpers -----------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // --- Curated recipes: read-only to any signed-in user ------------------
+    // Written only by the Admin SDK / Cloud Functions.
+    match /recipes/{recipeId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // --- Cached home feed: read-only to any signed-in user -----------------
+    // Built and written server-side (Function); never client-writable.
+    match /home_feed/{locale} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // --- User-owned data: owner-only across the whole subtree --------------
+    // Covers the profile doc `/users/{uid}` and every nested document:
+    //   users/{uid}/favorites/{favId}
+    //   users/{uid}/generatedRecipes/{genId}
+    //   users/{uid}/chats/{chatId}
+    //   users/{uid}/chats/{chatId}/messages/{msgId}
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // Recursive: all current and future subcollections are owner-only.
+      match /{document=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // --- Explicit deny-by-default for anything not matched above ------------
+    // Grants are additive, so this never overrides the allows above; it just
+    // makes the closed posture explicit for any unlisted path.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

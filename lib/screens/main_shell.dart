@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
-import '../core/widgets/empty_state.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
+import 'ai_hub_screen.dart';
 import 'favorites_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
@@ -45,11 +45,7 @@ class _MainShellState extends State<MainShell> {
     final pages = <Widget>[
       HomeScreen(onOpenAi: () => _select(2)),
       const FavoritesScreen(),
-      const EmptyState(
-        icon: Icons.auto_awesome,
-        title: 'AI Generator',
-        message: 'Generate recipes from ingredients or a prompt — coming soon.',
-      ),
+      const AiHubScreen(),
       const SavedScreen(),
       const ProfileScreen(),
     ];

@@ -67,9 +67,7 @@ class ErrorMapper {
         return 'Email sign-up is not enabled for this app yet. '
             'Enable Email/Password in the Firebase console.';
       default:
-        // TEMPORARY DIAGNOSTIC: surface the raw code so we can identify the
-        // cause. Revert to `_fallback` once the issue is resolved.
-        return 'Auth error (code: $code)';
+        return _fallback;
     }
   }
 
@@ -111,8 +109,6 @@ class ErrorMapper {
   /// }
   /// ```
   static String generic(Object error) {
-    // TEMPORARY DIAGNOSTIC: surface the raw error type/message so we can
-    // identify the cause. Revert to `_fallback` once resolved.
-    return 'Unexpected error: $error';
+    return _fallback;
   }
 }

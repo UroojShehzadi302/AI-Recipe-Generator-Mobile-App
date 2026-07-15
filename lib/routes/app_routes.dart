@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../models/recipe_model.dart';
+import '../screens/category_results_screen.dart';
 import '../screens/forgot_password_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/main_shell.dart';
 import '../screens/recipe_detail_screen.dart';
 import '../screens/register_screen.dart';
+import '../screens/search_screen.dart';
 import '../screens/splash_screen.dart';
 
 /// Central route table for the app.
@@ -23,6 +25,8 @@ class AppRoutes {
   static const String forgotPassword = '/forgot-password';
   static const String home = '/home';
   static const String recipeDetail = '/recipe';
+  static const String search = '/search';
+  static const String category = '/category';
   static const String favorites = '/favorites';
   static const String saved = '/saved';
   static const String chat = '/chat';
@@ -48,6 +52,14 @@ class AppRoutes {
           return _page(RecipeDetailScreen(recipe: args), settings);
         }
         return _page(const _ComingSoon(routeName: recipeDetail), settings);
+      case search:
+        return _page(const SearchScreen(), settings);
+      case category:
+        final args = settings.arguments;
+        if (args is String) {
+          return _page(CategoryResultsScreen(category: args), settings);
+        }
+        return _page(const _ComingSoon(routeName: category), settings);
       default:
         // Route named but screen not built yet (arrives in its feature
         // milestone). Show a placeholder rather than throwing.

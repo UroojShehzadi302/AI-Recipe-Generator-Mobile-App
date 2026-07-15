@@ -203,7 +203,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           _buildIngredientsSection(),
           const SizedBox(height: AppDimensions.spaceXl),
           _buildInstructionsSection(),
-          if (_hasNutrition) ...<Widget>[
+          if (_recipe.hasNutrition) ...<Widget>[
             const SizedBox(height: AppDimensions.spaceXl),
             _buildNutritionSection(),
           ],
@@ -219,27 +219,32 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   // ---- Stat chips ----------------------------------------------------------
 
   Widget _buildStatChips() {
+    // Only render chips for values that actually exist. TheMealDB recipes lack
+    // time / servings / calories, so we hide those instead of showing "0".
     return Wrap(
       spacing: AppDimensions.spaceS,
       runSpacing: AppDimensions.spaceS,
       children: <Widget>[
-        _StatChip(
-          icon: Icons.schedule,
-          label: '${_recipe.cookingTimeMinutes} min',
-        ),
+        if (_recipe.hasCookingTime)
+          _StatChip(
+            icon: Icons.schedule,
+            label: '${_recipe.cookingTimeMinutes} min',
+          ),
         if (_recipe.difficulty.isNotEmpty)
           _StatChip(
             icon: Icons.local_fire_department_outlined,
             label: _capitalize(_recipe.difficulty),
           ),
-        _StatChip(
-          icon: Icons.people_outline,
-          label: '${_recipe.servings} servings',
-        ),
-        _StatChip(
-          icon: Icons.bolt,
-          label: '${_recipe.calories} kcal',
-        ),
+        if (_recipe.hasServings)
+          _StatChip(
+            icon: Icons.people_outline,
+            label: '${_recipe.servings} servings',
+          ),
+        if (_recipe.hasCalories)
+          _StatChip(
+            icon: Icons.bolt,
+            label: '${_recipe.calories} kcal',
+          ),
       ],
     );
   }
@@ -338,11 +343,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   }
 
   // ---- Nutrition -----------------------------------------------------------
-
-  bool get _hasNutrition {
-    final Nutrition n = _recipe.nutrition;
-    return n.protein > 0 || n.carbs > 0 || n.fat > 0 || n.fiber > 0;
-  }
 
   Widget _buildNutritionSection() {
     final Nutrition n = _recipe.nutrition;

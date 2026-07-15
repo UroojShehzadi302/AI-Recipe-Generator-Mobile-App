@@ -293,6 +293,22 @@ class Recipe {
     );
   }
 
+  /// Whether a real calorie value is available (0 == unknown, e.g. TheMealDB).
+  bool get hasCalories => calories > 0;
+
+  /// Whether a cooking time is available (0 == unknown).
+  bool get hasCookingTime => cookingTimeMinutes > 0;
+
+  /// Whether a servings count is available (0 == unknown).
+  bool get hasServings => servings > 0;
+
+  /// Whether any nutrition macro is present (all-zero == unavailable).
+  bool get hasNutrition =>
+      nutrition.protein > 0 ||
+      nutrition.carbs > 0 ||
+      nutrition.fat > 0 ||
+      nutrition.fiber > 0;
+
   @override
   String toString() =>
       'Recipe(recipeId: $recipeId, title: $title, category: $category, '
