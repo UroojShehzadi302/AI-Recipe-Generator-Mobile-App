@@ -87,18 +87,29 @@ class AuthProvider extends ChangeNotifier {
 
   /// Google sign-in entry point.
   ///
-  /// Currently unimplemented (wired in M2). Surfaces the resulting error as
-  /// state rather than throwing to the UI.
+  /// On success the status becomes [AuthStatus.authenticated]. If the user
+  /// cancels the Google sheet the repository returns `null`, and this quietly
+  /// returns to the prior state with no error. Any real failure is surfaced as
+  /// [AuthStatus.error] rather than thrown to the UI.
   Future<void> signInWithGoogle() async {
     _setLoading();
+    notifyListeners();
     try {
-      _user = await _repository.signInWithGoogle();
-      _status = AuthStatus.authenticated;
-      _errorMessage = null;
+      final UserModel? result = await _repository.signInWithGoogle();
+      if (result == null) {
+        // Cancelled / interrupted — restore the previous neutral state.
+        _status =
+            _user != null ? AuthStatus.authenticated : AuthStatus.idle;
+        _errorMessage = null;
+      } else {
+        _user = result;
+        _status = AuthStatus.authenticated;
+        _errorMessage = null;
+      }
     } on Failure catch (f) {
       _setError(f.message);
     } catch (e) {
-      _setError('Google sign-in is not available yet.');
+      _setError('Google sign-in failed. Please try again.');
     }
     notifyListeners();
   }

@@ -6,6 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/widgets/ai_assistant_card.dart';
 import '../core/widgets/category_chip.dart';
+import '../core/widgets/loading_indicator.dart';
 import '../core/widgets/profile_avatar.dart';
 import '../core/widgets/recipe_card.dart';
 import '../core/widgets/section_title.dart';
@@ -18,8 +19,10 @@ import '../routes/app_routes.dart';
 ///
 /// Layout is inspired by modern AI cooking apps (greeting, filter chips, a
 /// highlighted AI card, recipe rails, a search bar) but rendered entirely in
-/// the app's warm brown / cream brand palette. Content is placeholder sample
-/// data until the `home_feed` backend lands (M5).
+/// the app's warm brown / cream brand palette. The recipe rails are driven by
+/// the **live catalog** ([RecipeProvider.loadHomeCatalog]): real TheMealDB
+/// cards for Popular / Quick & Easy, plus the curated Pakistani (desi) set —
+/// with loading, error+retry, and pull-to-refresh states.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onOpenAi});
 
@@ -32,6 +35,20 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategory = 0;
+
+  /// The `recipeId` currently being resolved to full detail, or `null` when
+  /// idle. Drives the blocking overlay spinner and prevents double-taps (rail
+  /// cards can be partial and need a lookup before the detail screen opens).
+  String? _openingId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<RecipeProvider>().loadHomeCatalog();
+    });
+  }
 
   void _comingSoon(String message) {
     ScaffoldMessenger.of(context)
@@ -48,44 +65,101 @@ class _HomeScreenState extends State<HomeScreen> {
     await context.read<RecipeProvider>().toggleFavorite(uid, recipe);
   }
 
+  /// Opens [recipe] — resolving a partial rail card to full detail first.
+  ///
+  /// Curated (desi) and full cards resolve instantly; live TheMealDB category
+  /// cards carry only id/title/image, so we show a blocking overlay while the
+  /// full recipe is fetched, then push the detail screen (or warn on failure).
+  Future<void> _openRecipe(Recipe recipe) async {
+    if (_openingId != null) return;
+
+    final String? id = recipe.recipeId;
+    if (id == null || id.isEmpty) {
+      Navigator.pushNamed(context, AppRoutes.recipeDetail, arguments: recipe);
+      return;
+    }
+
+    setState(() => _openingId = id);
+    final Recipe? full =
+        await context.read<RecipeProvider>().getRecipeDetails(id);
+    if (!mounted) return;
+    setState(() => _openingId = null);
+
+    if (full != null) {
+      Navigator.pushNamed(context, AppRoutes.recipeDetail, arguments: full);
+    } else {
+      _comingSoon("Couldn't load this recipe. Check your connection.");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = context.select<AuthProvider, String>(
       (p) => (p.user?.name ?? '').trim(),
     );
     final greetingName = name.isEmpty ? 'there' : name.split(' ').first;
+    final recipeProvider = context.watch<RecipeProvider>();
 
     return SafeArea(
       bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      child: Stack(
         children: [
-          _header(greetingName),
-          const SizedBox(height: 20),
-          _searchBar(),
-          const SizedBox(height: 18),
-          _categoryChips(),
-          const SizedBox(height: 22),
-          AiAssistantCard(
-            onTap: widget.onOpenAi ?? () => _comingSoon('AI generator coming soon'),
+          RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: () =>
+                context.read<RecipeProvider>().retryHomeCatalog(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              children: [
+                _header(greetingName),
+                const SizedBox(height: 20),
+                _searchBar(),
+                const SizedBox(height: 18),
+                _categoryChips(),
+                const SizedBox(height: 22),
+                AiAssistantCard(
+                  onTap: widget.onOpenAi ??
+                      () => _comingSoon('AI generator coming soon'),
+                ),
+                const SizedBox(height: 26),
+                SectionTitle(
+                  title: 'Popular Recipes',
+                  onSeeAll: () => _openCategory(_popularCategory),
+                ),
+                const SizedBox(height: 12),
+                _liveRail(recipeProvider, recipeProvider.popularRail),
+                const SizedBox(height: 26),
+                SectionTitle(
+                  title: 'Pakistani Favourites',
+                  onSeeAll: () => _openCategory('Pakistani'),
+                ),
+                const SizedBox(height: 12),
+                _desiRail(recipeProvider),
+                const SizedBox(height: 26),
+                SectionTitle(
+                  title: 'Quick & Easy',
+                  onSeeAll: () => _openCategory(_quickCategory),
+                ),
+                const SizedBox(height: 12),
+                _liveRail(recipeProvider, recipeProvider.quickRail),
+              ],
+            ),
           ),
-          const SizedBox(height: 26),
-          SectionTitle(
-            title: 'Popular Recipes',
-            onSeeAll: () => _comingSoon('See all coming soon'),
-          ),
-          const SizedBox(height: 12),
-          _recipeRail(SampleRecipes.popular),
-          const SizedBox(height: 26),
-          SectionTitle(
-            title: 'Quick & Easy',
-            onSeeAll: () => _comingSoon('See all coming soon'),
-          ),
-          const SizedBox(height: 12),
-          _recipeRail(SampleRecipes.quickAndEasy),
+          if (_openingId != null) _openingOverlay(),
         ],
       ),
     );
+  }
+
+  /// App category the "Popular Recipes" rail maps to (mirrors the provider).
+  static const String _popularCategory = 'Dinner';
+
+  /// App category the "Quick & Easy" rail maps to (mirrors the provider).
+  static const String _quickCategory = 'Breakfast';
+
+  void _openCategory(String category) {
+    Navigator.pushNamed(context, AppRoutes.category, arguments: category);
   }
 
   Widget _header(String greetingName) {
@@ -135,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _searchBar() {
     return GestureDetector(
-      onTap: () => _comingSoon('Search coming soon'),
+      onTap: () => Navigator.pushNamed(context, AppRoutes.search),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         decoration: BoxDecoration(
@@ -157,6 +231,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Selects a category chip. Index 0 ('For You') is the "all" pseudo-category,
+  /// so it only updates the visual selection; any real category also navigates
+  /// to its results screen.
+  void _onCategoryTap(int i) {
+    setState(() => _selectedCategory = i);
+    if (i == 0) return;
+    _openCategory(SampleRecipes.categories[i]);
+  }
+
   Widget _categoryChips() {
     return SizedBox(
       height: 40,
@@ -167,10 +250,40 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (context, i) => CategoryChip(
           label: SampleRecipes.categories[i],
           selected: i == _selectedCategory,
-          onTap: () => setState(() => _selectedCategory = i),
+          onTap: () => _onCategoryTap(i),
         ),
       ),
     );
+  }
+
+  /// A live (network-backed) rail: shows a loading strip while the catalog
+  /// loads, an inline retry on failure, and the recipe cards once loaded.
+  Widget _liveRail(RecipeProvider provider, List<Recipe> recipes) {
+    switch (provider.homeCatalogStatus) {
+      case LoadStatus.idle:
+      case LoadStatus.loading:
+        return const _RailLoading();
+      case LoadStatus.error:
+        return _RailError(
+          message: provider.homeCatalogError ?? 'Something went wrong.',
+          onRetry: () => provider.retryHomeCatalog(),
+        );
+      case LoadStatus.loaded:
+        if (recipes.isEmpty) return const _RailEmpty();
+        return _recipeRail(recipes);
+    }
+  }
+
+  /// The desi rail. Backed by the curated local set, so it shows as soon as it
+  /// is populated — even if the network rails failed. Falls back to the loading
+  /// strip only while the very first load is still in flight.
+  Widget _desiRail(RecipeProvider provider) {
+    if (provider.desiRail.isNotEmpty) return _recipeRail(provider.desiRail);
+    if (provider.homeCatalogStatus == LoadStatus.loading ||
+        provider.homeCatalogStatus == LoadStatus.idle) {
+      return const _RailLoading();
+    }
+    return const _RailEmpty();
   }
 
   Widget _recipeRail(List<Recipe> recipes) {
@@ -184,12 +297,94 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (context, i) => RecipeCard(
           recipe: recipes[i],
           isFavorite: recipeProvider.isFavorite(recipes[i]),
-          onTap: () => Navigator.pushNamed(
-            context,
-            AppRoutes.recipeDetail,
-            arguments: recipes[i],
-          ),
+          onTap: () => _openRecipe(recipes[i]),
           onFavorite: () => _toggleFavorite(recipes[i]),
+        ),
+      ),
+    );
+  }
+
+  /// A subtle translucent scrim + centered spinner shown while a tapped card is
+  /// resolved to full detail. Absorbs input so the rails can't be tapped again
+  /// mid-resolve.
+  Widget _openingOverlay() {
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          ModalBarrier(
+            color: AppColors.textPrimary.withValues(alpha: 0.25),
+            dismissible: false,
+          ),
+          const LoadingIndicator(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fixed-height placeholder shown while a Home rail loads.
+class _RailLoading extends StatelessWidget {
+  const _RailLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(height: 212, child: LoadingIndicator());
+  }
+}
+
+/// Inline, rail-sized error with a retry action.
+class _RailError extends StatelessWidget {
+  const _RailError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 212,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.wifi_off, color: AppColors.textSecondary, size: 30),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+              child: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Rail-sized empty placeholder when a category has no recipes.
+class _RailEmpty extends StatelessWidget {
+  const _RailEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: 212,
+      child: Center(
+        child: Text(
+          'Nothing here yet',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
       ),
     );

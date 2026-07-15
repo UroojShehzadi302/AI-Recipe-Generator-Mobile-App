@@ -74,19 +74,7 @@ class RecipeCard extends StatelessWidget {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.schedule,
-                            size: 14, color: AppColors.textSecondary),
-                        const SizedBox(width: 4),
-                        Text('${recipe.cookingTimeMinutes} min', style: _stat),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.local_fire_department_outlined,
-                            size: 14, color: AppColors.secondary),
-                        const SizedBox(width: 4),
-                        Text('${recipe.calories} kcal', style: _stat),
-                      ],
-                    ),
+                    child: Row(children: _statChildren()),
                   ),
                 ],
               ),
@@ -99,6 +87,42 @@ class RecipeCard extends StatelessWidget {
 
   static const TextStyle _stat =
       TextStyle(fontSize: 12, color: AppColors.textSecondary);
+
+  /// Builds the quick-stats row, showing only the values that actually exist.
+  ///
+  /// TheMealDB recipes carry no cooking time or calories, so we hide those
+  /// fields rather than render a fake "0 min" / "0 kcal". When neither stat is
+  /// available the row would be empty, so we fall back to a subtle single label
+  /// (difficulty if present, otherwise "View recipe") to keep the card looking
+  /// intentional.
+  List<Widget> _statChildren() {
+    final List<Widget> children = <Widget>[];
+
+    if (recipe.hasCookingTime) {
+      children.add(const Icon(Icons.schedule,
+          size: 14, color: AppColors.textSecondary));
+      children.add(const SizedBox(width: 4));
+      children.add(Text('${recipe.cookingTimeMinutes} min', style: _stat));
+    }
+
+    if (recipe.hasCalories) {
+      // Keep the 12px separator only when a time stat precedes the calories.
+      if (children.isNotEmpty) children.add(const SizedBox(width: 12));
+      children.add(const Icon(Icons.local_fire_department_outlined,
+          size: 14, color: AppColors.secondary));
+      children.add(const SizedBox(width: 4));
+      children.add(Text('${recipe.calories} kcal', style: _stat));
+    }
+
+    if (children.isEmpty) {
+      children.add(Text(
+        recipe.difficulty.isNotEmpty ? recipe.difficulty : 'View recipe',
+        style: _stat,
+      ));
+    }
+
+    return children;
+  }
 
   Widget _image() {
     const double h = 112;

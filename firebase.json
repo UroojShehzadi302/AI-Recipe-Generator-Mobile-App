@@ -1,1 +1,25 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"ai-recipe-generator-db27c","appId":"1:845885648760:android:e53a89769a917208ff228d","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"ai-recipe-generator-db27c","configurations":{"android":"1:845885648760:android:e53a89769a917208ff228d"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "ai-recipe-generator-db27c",
+          "appId": "1:845885648760:android:e53a89769a917208ff228d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ai-recipe-generator-db27c",
+          "configurations": {
+            "android": "1:845885648760:android:e53a89769a917208ff228d"
+          }
+        }
+      }
+    }
+  }
+}

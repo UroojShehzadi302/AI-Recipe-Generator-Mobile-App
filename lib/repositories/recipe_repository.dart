@@ -7,27 +7,37 @@
 // failures are translated into a [FirestoreFailure] carrying a user-safe
 // message, so callers never see raw Firebase exceptions.
 //
-// AI generation is intentionally *not* implemented here: it is delivered in M6
-// through the `generateRecipe` Cloud Function. [generateRecipe] is a stub that
-// throws [UnimplementedError] until then.
+// AI generation delegates to an [AiService] (direct Gemini in dev, per the
+// no-Cloud-Functions dev decision). This repository owns the Recipe *schema*:
+// it asks the service for the model's JSON text and parses it into a [Recipe]
+// via the defensive [Recipe.fromJson]. The service knows nothing about the
+// domain model, so swapping it (dev → Cloud Functions) never touches this file.
 //
 // Imports are limited to `cloud_firestore` (for [FieldValue]) plus the
-// project's own model/error/service files — no cloud_functions, no storage.
+// project's own model/error/service files.
+
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/constants/desi_recipes.dart';
 import '../core/error/error_mapper.dart';
 import '../core/error/failure.dart';
 import '../models/recipe_model.dart';
+import '../services/ai_service.dart';
 import '../services/firestore_service.dart';
+import '../services/meal_db_service.dart';
 
 /// Reads and writes recipe-related data (home feed, favorites, saved/generated
 /// recipes) following the Backend Architecture schema (§6).
 class RecipeRepository {
-  /// Creates a repository backed by [_firestore] (constructor injection).
-  RecipeRepository(this._firestore);
+  /// Creates a repository backed by [_firestore], [_ai] and [_mealDb]
+  /// (constructor injection).
+  RecipeRepository(this._firestore, this._ai, this._mealDb);
 
   final FirestoreService _firestore;
+  final AiService _ai;
+  final MealDbService _mealDb;
 
   // ---------------------------------------------------------------------------
   // Path helpers (schema lives here, not in the service).
@@ -60,16 +70,217 @@ class RecipeRepository {
   }
 
   // ---------------------------------------------------------------------------
-  // AI generation (M6 stub).
+  // Recipe catalog (blended source).
+  //
+  // The catalog blends TWO sources behind identical, source-agnostic method
+  // signatures:
+  //   1. A curated built-in [DesiRecipes] set (the `'Pakistani'` category) —
+  //      full const [Recipe] objects served locally with no network/cache.
+  //   2. TheMealDB network source (Option A) for every other category.
+  // The 'Pakistani' local source is permanent: it persists after the eventual
+  // Firestore swap, whereas the TheMealDB path below is the stopgap.
+  //
+  // TODO(decision-1): the TheMealDB path is a stopgap while real content
+  // (curated Firestore feed vs. recipe API vs. AI-only) is undecided. When
+  // Decision 1 lands, repoint the network path at the chosen source — the
+  // SIGNATURES stay identical so providers/UI never change, and the curated
+  // desi blend stays in place.
   // ---------------------------------------------------------------------------
 
-  /// Generates a recipe from a free-text [prompt].
+  /// The app category served by the built-in curated [DesiRecipes] source.
+  /// Matched case-insensitively.
+  static const String _desiCategory = 'Pakistani';
+
+  /// True when [appCategory] denotes the curated desi ('Pakistani') category.
+  static bool _isDesiCategory(String? appCategory) =>
+      appCategory != null &&
+      appCategory.trim().toLowerCase() == _desiCategory.toLowerCase();
+
+  /// Filters the curated [DesiRecipes] set by free-text [query]
+  /// (case-insensitive substring on title, any ingredient name, any tag, or
+  /// category). A blank query returns every desi recipe.
+  static List<Recipe> _desiMatches(String query) {
+    final String q = query.trim().toLowerCase();
+    if (q.isEmpty) return DesiRecipes.all;
+    return DesiRecipes.all.where((Recipe r) {
+      if (r.title.toLowerCase().contains(q)) return true;
+      if (r.category.toLowerCase().contains(q)) return true;
+      if (r.tags.any((String t) => t.toLowerCase().contains(q))) return true;
+      if (r.ingredients
+          .any((Ingredient i) => i.name.toLowerCase().contains(q))) {
+        return true;
+      }
+      return false;
+    }).toList(growable: false);
+  }
+
+  /// App-category -> TheMealDB-category mapping.
   ///
-  /// Not yet available: wired in M6 via the `generateRecipe` Cloud Function.
+  /// TheMealDB's taxonomy differs from the app's, so `Lunch`/`Dinner`/`Healthy`
+  /// are approximations (Pasta / Beef / Vegetarian) chosen for reasonable
+  /// results rather than exact equivalence.
+  static const Map<String, String> _categoryMap = <String, String>{
+    'Breakfast': 'Breakfast',
+    'Lunch': 'Pasta',
+    'Dinner': 'Beef',
+    'Desserts': 'Dessert',
+    'Healthy': 'Vegetarian',
+    'Vegan': 'Vegan',
+  };
+
+  /// In-memory catalog caches to avoid repeated identical API calls within a
+  /// session (search results / category lists keyed by request; recipes by id).
+  final Map<String, List<Recipe>> _catalogCache = <String, List<Recipe>>{};
+  final Map<String, Recipe> _recipeByIdCache = <String, Recipe>{};
+
+  /// Searches the catalog by free-text [query], optionally narrowed to an
+  /// [appCategory].
+  ///
+  /// Results blend the curated [DesiRecipes] set with the [MealDbService]
+  /// search hits (full recipes):
+  /// * `appCategory == 'Pakistani'` returns ONLY the curated desi matches (no
+  ///   network call).
+  /// * another real category (non-null, non-empty, not `'For You'`) keeps the
+  ///   TheMealDB-only behavior, narrowed to the mapped TheMealDB category
+  ///   (desi recipes never fall in those categories).
+  /// * no category / `'For You'` runs the TheMealDB search and PREPENDS the
+  ///   desi matches so curated dishes surface in a normal search.
+  ///
+  /// Cached per (query, category). Source-agnostic: a future Firestore impl
+  /// keeps this exact signature.
+  Future<List<Recipe>> searchRecipes(
+    String query, {
+    String? appCategory,
+  }) async {
+    final String cacheKey =
+        'search:${query.toLowerCase().trim()}:${appCategory ?? ''}';
+    final List<Recipe>? cached = _catalogCache[cacheKey];
+    if (cached != null) return cached;
+
+    // Pakistani = curated local source only; no network.
+    if (_isDesiCategory(appCategory)) {
+      final List<Recipe> desi = _desiMatches(query);
+      _catalogCache[cacheKey] = desi;
+      return desi;
+    }
+
+    try {
+      final List<Recipe> results = await _mealDb.searchByName(query.trim());
+
+      final bool hasRealCategory = appCategory != null &&
+          appCategory.isNotEmpty &&
+          appCategory.toLowerCase() != 'for you';
+
+      List<Recipe> blended;
+      if (hasRealCategory) {
+        // Another real category: TheMealDB only (curated desi aren't in these).
+        final String targetCat =
+            (_categoryMap[appCategory] ?? appCategory).toLowerCase();
+        blended = results
+            .where((Recipe r) => r.category.toLowerCase() == targetCat)
+            .toList(growable: false);
+      } else {
+        // No category / 'For You': surface curated desi dishes first, then the
+        // network hits. Ids never collide, so no de-duplication is needed.
+        blended = <Recipe>[..._desiMatches(query), ...results];
+      }
+
+      _catalogCache[cacheKey] = blended;
+      return blended;
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Lists catalog recipes for an [appCategory] (e.g. the Home category chips).
+  ///
+  /// Maps the app category to a TheMealDB category; an unmapped category yields
+  /// `const <Recipe>[]`. TheMealDB's `filter.php` returns PARTIAL cards, so
+  /// these recipes carry id/title/image only — resolve full detail with
+  /// [getRecipeById]. Each card's category is RE-LABELED back to [appCategory]
+  /// so the UI shows the app's taxonomy. Cached per app category.
+  Future<List<Recipe>> getRecipesByCategory(String appCategory) async {
+    // Pakistani = curated local source, served directly (const, no network).
+    if (_isDesiCategory(appCategory)) return DesiRecipes.all;
+
+    final String? mealCat = _categoryMap[appCategory];
+    if (mealCat == null) return const <Recipe>[];
+
+    final String cacheKey = 'cat:$appCategory';
+    final List<Recipe>? cached = _catalogCache[cacheKey];
+    if (cached != null) return cached;
+
+    try {
+      final List<Recipe> list = await _mealDb.filterByCategory(mealCat);
+      final List<Recipe> relabeled = list
+          .map((Recipe r) => r.copyWith(category: appCategory))
+          .toList(growable: false);
+      _catalogCache[cacheKey] = relabeled;
+      return relabeled;
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Resolves a single full catalog recipe by [id] (used to turn a partial
+  /// category card into full detail). Returns `null` when not found. Cached
+  /// by id. Source-agnostic signature.
+  Future<Recipe?> getRecipeById(String id) async {
+    // Curated desi recipes are full and their 'desi-...' ids aren't valid
+    // TheMealDB ids — resolve them locally before any cache/network lookup.
+    for (final Recipe r in DesiRecipes.all) {
+      if (r.recipeId == id) return r;
+    }
+
+    if (_recipeByIdCache.containsKey(id)) return _recipeByIdCache[id];
+
+    try {
+      final Recipe? r = await _mealDb.lookupById(id);
+      if (r != null) _recipeByIdCache[id] = r;
+      return r;
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // AI generation.
+  // ---------------------------------------------------------------------------
+
+  /// Generates a recipe from a free-text [prompt] via the [AiService].
+  ///
+  /// Asks the service for the model's JSON text, decodes it, and maps it into a
+  /// [Recipe] (forced to `sourceType: 'generated'`). Parsing is defensive:
+  /// [Recipe.fromJson] never throws on missing/wrong-typed fields, so a partial
+  /// model response degrades gracefully rather than crashing.
+  ///
+  /// Errors surface as domain [Failure]s: service [AiFailure]/[NetworkFailure]
+  /// propagate unchanged; malformed JSON becomes an [AiFailure]; anything else
+  /// an [UnknownFailure]. (With no API key the service throws
+  /// [UnimplementedError], which callers map to a friendly "coming soon".)
   Future<Recipe> generateRecipe(String prompt) async {
-    throw UnimplementedError(
-      'Recipe generation is wired in M6 via the generateRecipe Cloud Function',
-    );
+    final String raw = await _ai.generateRecipe(prompt);
+    try {
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        throw AiFailure(ErrorMapper.aiMessage('invalid-response'));
+      }
+      final Recipe recipe =
+          Recipe.fromJson(Map<String, dynamic>.from(decoded));
+      return recipe.copyWith(sourceType: 'generated');
+    } on Failure {
+      rethrow;
+    } on FormatException {
+      throw AiFailure(ErrorMapper.aiMessage('invalid-response'));
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
   }
 
   // ---------------------------------------------------------------------------

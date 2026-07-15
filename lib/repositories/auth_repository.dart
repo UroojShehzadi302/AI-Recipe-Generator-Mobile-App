@@ -6,7 +6,7 @@
 // exists for every authenticated account.
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/error/error_mapper.dart';
 import '../core/error/failure.dart';
@@ -83,13 +83,10 @@ class AuthRepository {
       }
       return _ensureUserProfile(user);
     } on FirebaseAuthException catch (e) {
-      debugPrint('[AUTH] signIn FirebaseAuthException: '
-          'code=${e.code} message=${e.message}');
       throw AuthFailure(_authFailureMessage(e));
     } on Failure {
       rethrow;
-    } catch (e, s) {
-      debugPrint('[AUTH] signIn unknown error: $e\n$s');
+    } catch (e) {
       throw UnknownFailure(ErrorMapper.generic(e));
     }
   }
@@ -136,13 +133,10 @@ class AuthRepository {
 
       return model;
     } on FirebaseAuthException catch (e) {
-      debugPrint('[AUTH] register FirebaseAuthException: '
-          'code=${e.code} message=${e.message}');
       throw AuthFailure(_authFailureMessage(e));
     } on Failure {
       rethrow;
-    } catch (e, s) {
-      debugPrint('[AUTH] register unknown error: $e\n$s');
+    } catch (e) {
       throw UnknownFailure(ErrorMapper.generic(e));
     }
   }
@@ -167,14 +161,35 @@ class AuthRepository {
     }
   }
 
-  /// Google sign-in placeholder.
+  /// Runs Google sign-in and resolves the user's [UserModel].
   ///
-  /// Kept so the provider can call it uniformly. Wired up in M2 once
-  /// `google_sign_in` is added.
-  Future<UserModel> signInWithGoogle() {
-    throw UnimplementedError(
-      'Google sign-in is wired in M2 once google_sign_in is added',
-    );
+  /// Returns `null` when the user **cancels** or the flow is interrupted (so
+  /// the UI can quietly return to its prior state instead of showing an error).
+  /// Throws [AuthFailure] for a misconfigured provider or a rejected Firebase
+  /// credential, and [UnknownFailure] for anything else.
+  Future<UserModel?> signInWithGoogle() async {
+    try {
+      final UserCredential credential =
+          await _authService.signInWithGoogle();
+      final User? user = credential.user;
+      if (user == null) {
+        throw const AuthFailure();
+      }
+      return _ensureUserProfile(user, provider: 'google');
+    } on GoogleSignInException catch (e) {
+      // A user-driven dismissal is not an error — signal it with null.
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        return null;
+      }
+      throw AuthFailure(_googleFailureMessage(e));
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_authFailureMessage(e));
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
   }
 
   /// Maps a [FirebaseAuthException] to a friendly message, special-casing the
@@ -190,9 +205,28 @@ class AuthRepository {
     return ErrorMapper.authMessage(e.code);
   }
 
+  /// Maps a non-cancellation [GoogleSignInException] to a friendly message.
+  String _googleFailureMessage(GoogleSignInException e) {
+    switch (e.code) {
+      case GoogleSignInExceptionCode.clientConfigurationError:
+      case GoogleSignInExceptionCode.providerConfigurationError:
+        return 'Google sign-in is not configured for this app yet. '
+            'Enable the Google provider and add the SHA-1 in the Firebase '
+            'console.';
+      case GoogleSignInExceptionCode.uiUnavailable:
+        return 'Google sign-in is unavailable right now. Please try again.';
+      default:
+        return 'Google sign-in failed. Please try again.';
+    }
+  }
+
   /// Returns the stored [UserModel] for [user], creating a minimal one if the
-  /// Firestore document is missing.
-  Future<UserModel> _ensureUserProfile(User user) async {
+  /// Firestore document is missing. [provider] records how the account signed
+  /// in (`'password'` or `'google'`).
+  Future<UserModel> _ensureUserProfile(
+    User user, {
+    String provider = 'password',
+  }) async {
     // Build a model straight from the auth account first, so sign-in never
     // fails just because Firestore is unreachable or locked down.
     final UserModel fallback = UserModel(
@@ -200,7 +234,7 @@ class AuthRepository {
       name: user.displayName ?? '',
       email: user.email ?? '',
       photoUrl: user.photoURL,
-      provider: 'password',
+      provider: provider,
       emailVerified: user.emailVerified,
     );
 

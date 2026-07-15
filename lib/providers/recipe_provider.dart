@@ -16,6 +16,7 @@
 
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/sample_recipes.dart';
 import '../core/error/failure.dart';
 import '../models/recipe_model.dart';
 import '../repositories/recipe_repository.dart';
@@ -83,6 +84,92 @@ class RecipeProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  // ---------------------------------------------------------------------------
+  // Home catalog (live rails).
+  //
+  // Drives the Home tab's horizontal rails from the live, cached catalog (the
+  // repository's TheMealDB source + the curated desi set) instead of static
+  // placeholder data. Three rails load together:
+  //   * popular  — a live network category (many real cards).
+  //   * desi     — the curated Pakistani set (local, always available).
+  //   * quick    — a second live network category.
+  // Desi is loaded first and independently so it still shows when the network
+  // rails fail (offline). Source-agnostic: a future Firestore feed swaps in
+  // behind [RecipeRepository.getRecipesByCategory] without touching this code.
+  // ---------------------------------------------------------------------------
+
+  /// App categories backing the two live (network) Home rails.
+  static const String _popularCategory = 'Dinner';
+  static const String _quickCategory = 'Breakfast';
+
+  /// App category backing the curated desi Home rail.
+  static const String _desiCategory = 'Pakistani';
+
+  LoadStatus _homeCatalogStatus = LoadStatus.idle;
+  String? _homeCatalogError;
+  List<Recipe> _popularRail = const <Recipe>[];
+  List<Recipe> _desiRail = const <Recipe>[];
+  List<Recipe> _quickRail = const <Recipe>[];
+
+  /// Status of the live Home rails load.
+  LoadStatus get homeCatalogStatus => _homeCatalogStatus;
+
+  /// User-friendly message for the last failed Home catalog load, or `null`.
+  String? get homeCatalogError => _homeCatalogError;
+
+  /// Popular recipes rail (live network category).
+  List<Recipe> get popularRail => _popularRail;
+
+  /// Curated Pakistani / desi recipes rail (local, always available).
+  List<Recipe> get desiRail => _desiRail;
+
+  /// Quick & easy recipes rail (live network category).
+  List<Recipe> get quickRail => _quickRail;
+
+  /// Loads the Home rails. Cheap to call repeatedly: it no-ops once loaded
+  /// unless [force] is set (pull-to-refresh). Never throws.
+  ///
+  /// Two phases so Home is **never empty or stuck on a spinner**:
+  ///  1. Seed instantly with curated content — the desi set (local) plus
+  ///     curated sample rails for Popular / Quick — and mark the catalog loaded
+  ///     right away.
+  ///  2. Upgrade Popular & Quick to the live TheMealDB catalog in the
+  ///     background. Any failure or timeout silently keeps the curated seed, so
+  ///     a slow/absent network degrades gracefully instead of spinning forever.
+  Future<void> loadHomeCatalog({bool force = false}) async {
+    if (!force && _homeCatalogStatus == LoadStatus.loaded) return;
+
+    // Phase 1 — instant curated seed. The desi source is local (no network),
+    // and the sample rails guarantee the network rails show *something* at once.
+    try {
+      _desiRail = await _repository.getRecipesByCategory(_desiCategory);
+    } catch (_) {
+      _desiRail = const <Recipe>[];
+    }
+    if (_popularRail.isEmpty) _popularRail = SampleRecipes.popular;
+    if (_quickRail.isEmpty) _quickRail = SampleRecipes.quickAndEasy;
+    _homeCatalogStatus = LoadStatus.loaded;
+    _homeCatalogError = null;
+    notifyListeners();
+
+    // Phase 2 — upgrade to the live catalog in the background; keep the seed on
+    // any failure so the rails never revert to a spinner or an empty state.
+    try {
+      final List<List<Recipe>> live = await Future.wait(<Future<List<Recipe>>>[
+        _repository.getRecipesByCategory(_popularCategory),
+        _repository.getRecipesByCategory(_quickCategory),
+      ]);
+      if (live[0].isNotEmpty) _popularRail = live[0];
+      if (live[1].isNotEmpty) _quickRail = live[1];
+      notifyListeners();
+    } catch (_) {
+      // Keep the curated seed — nothing to surface to the user.
+    }
+  }
+
+  /// Reloads the live Home rails from scratch (pull-to-refresh / retry).
+  Future<void> retryHomeCatalog() => loadHomeCatalog(force: true);
 
   // ---------------------------------------------------------------------------
   // AI generation state.
@@ -239,6 +326,171 @@ class RecipeProvider extends ChangeNotifier {
       _savedError = _genericError;
     }
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Search & catalog state.
+  // ---------------------------------------------------------------------------
+  //
+  // TODO(M5/content-source): the catalog now comes from the repository's
+  // TheMealDB source (via [RecipeRepository.searchRecipes] /
+  // [getRecipesByCategory] / [getRecipeById]). When the real content source
+  // lands (Open Decision 1), the repository swaps to Firestore behind the same
+  // signatures, so nothing in this provider changes.
+
+  LoadStatus _searchStatus = LoadStatus.idle;
+  List<Recipe> _searchResults = const <Recipe>[];
+  String? _searchError;
+  String _searchQuery = '';
+  String? _searchCategory;
+  final List<String> _recentSearches = <String>[];
+
+  /// Status of the last [search] call.
+  LoadStatus get searchStatus => _searchStatus;
+
+  /// Recipes matching the last [search] call.
+  List<Recipe> get searchResults => _searchResults;
+
+  /// User-friendly message for the last failed [search], or `null`.
+  String? get searchError => _searchError;
+
+  /// The current search query text.
+  String get searchQuery => _searchQuery;
+
+  /// The user's recent search terms, most-recent first (read-only view).
+  List<String> get recentSearches => List.unmodifiable(_recentSearches);
+
+  /// Searches the catalog for [query], optionally narrowed to [category].
+  ///
+  /// An empty [query] with no meaningful [category] (null, blank, or
+  /// `'For You'`) short-circuits to an idle empty result — no network call — so
+  /// the screen can show recent/popular instead. Otherwise delegates to
+  /// [RecipeRepository.searchRecipes]. Never throws: a domain [Failure] surfaces
+  /// its message on [searchError], anything else the generic message.
+  Future<void> search(String query, {String? category}) async {
+    _searchQuery = query;
+    _searchCategory = category;
+
+    final bool emptyCategory = category == null ||
+        category.trim().isEmpty ||
+        category.trim().toLowerCase() == 'for you';
+    if (query.trim().isEmpty && emptyCategory) {
+      _searchResults = const <Recipe>[];
+      _searchStatus = LoadStatus.idle;
+      _searchError = null;
+      notifyListeners();
+      return;
+    }
+
+    _searchStatus = LoadStatus.loading;
+    _searchError = null;
+    notifyListeners();
+
+    try {
+      _searchResults =
+          await _repository.searchRecipes(query, appCategory: category);
+      _searchStatus = LoadStatus.loaded;
+    } on Failure catch (failure) {
+      _searchError = failure.message;
+      _searchStatus = LoadStatus.error;
+    } catch (_) {
+      _searchError = _genericError;
+      _searchStatus = LoadStatus.error;
+    }
+    notifyListeners();
+  }
+
+  /// Retries the last [search] with the same query and category filter.
+  Future<void> retrySearch() => search(_searchQuery, category: _searchCategory);
+
+  /// Records [term] as a recent search: trimmed, de-duplicated
+  /// (case-insensitive), inserted at the front, and capped at 8 entries.
+  void addRecentSearch(String term) {
+    final String trimmed = term.trim();
+    if (trimmed.isEmpty) return;
+
+    _recentSearches
+        .removeWhere((String t) => t.toLowerCase() == trimmed.toLowerCase());
+    _recentSearches.insert(0, trimmed);
+    if (_recentSearches.length > 8) {
+      _recentSearches.removeRange(8, _recentSearches.length);
+    }
+    notifyListeners();
+  }
+
+  /// Clears the current query and results, settling into `idle` (recent
+  /// searches are kept).
+  void clearSearch() {
+    _searchQuery = '';
+    _searchResults = const <Recipe>[];
+    _searchStatus = LoadStatus.idle;
+    _searchError = null;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Category catalog state.
+  // ---------------------------------------------------------------------------
+
+  LoadStatus _categoryStatus = LoadStatus.idle;
+  List<Recipe> _categoryRecipes = const <Recipe>[];
+  String? _categoryError;
+  String _categoryName = '';
+
+  /// Status of the last [loadCategory] call.
+  LoadStatus get categoryStatus => _categoryStatus;
+
+  /// Recipes for the last loaded category (partial cards — resolve full detail
+  /// with [getRecipeDetails]).
+  List<Recipe> get categoryRecipes => _categoryRecipes;
+
+  /// User-friendly message for the last failed [loadCategory], or `null`.
+  String? get categoryError => _categoryError;
+
+  /// The app category name of the last [loadCategory] call.
+  String get categoryName => _categoryName;
+
+  /// Loads catalog recipes for [appCategory] via
+  /// [RecipeRepository.getRecipesByCategory].
+  ///
+  /// Never throws: a domain [Failure] surfaces its message on [categoryError],
+  /// anything else the generic message.
+  Future<void> loadCategory(String appCategory) async {
+    _categoryName = appCategory;
+    _categoryStatus = LoadStatus.loading;
+    _categoryError = null;
+    notifyListeners();
+
+    try {
+      _categoryRecipes = await _repository.getRecipesByCategory(appCategory);
+      _categoryStatus = LoadStatus.loaded;
+    } on Failure catch (failure) {
+      _categoryError = failure.message;
+      _categoryStatus = LoadStatus.error;
+    } catch (_) {
+      _categoryError = _genericError;
+      _categoryStatus = LoadStatus.error;
+    }
+    notifyListeners();
+  }
+
+  /// Retries the last [loadCategory].
+  Future<void> retryCategory() => loadCategory(_categoryName);
+
+  /// Resolves a partial (category-list) recipe to full detail by [id] via
+  /// [RecipeRepository.getRecipeById].
+  ///
+  /// Returns the full [Recipe] on success, or `null` when not found or on any
+  /// error (no global status — the screen shows its own inline loading and a
+  /// snackbar on `null`).
+  Future<Recipe?> getRecipeDetails(String id) async {
+    try {
+      return await _repository.getRecipeById(id);
+    } on Failure catch (_) {
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------------------

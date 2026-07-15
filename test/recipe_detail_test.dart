@@ -8,6 +8,8 @@ import 'package:ai_recipe_generator/repositories/user_repository.dart';
 import 'package:ai_recipe_generator/screens/recipe_detail_screen.dart';
 import 'package:ai_recipe_generator/services/auth_service.dart';
 import 'package:ai_recipe_generator/services/firestore_service.dart';
+import 'package:ai_recipe_generator/services/meal_db_service.dart';
+import 'package:ai_recipe_generator/services/unconfigured_ai_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +20,13 @@ void main() {
     // Services/repositories now resolve Firebase lazily, so they can be
     // constructed in a widget test. The detail screen's build path only reads
     // in-memory state (RecipeProvider.isFavorite), so no Firebase call occurs.
-    final recipeProvider = RecipeProvider(RecipeRepository(FirestoreService()));
+    final recipeProvider = RecipeProvider(
+      RecipeRepository(
+        FirestoreService(),
+        const UnconfiguredAiService(),
+        MealDbService(),
+      ),
+    );
     final authProvider = AuthProvider(
       AuthRepository(
         authService: AuthService(),

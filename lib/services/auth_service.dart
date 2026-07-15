@@ -7,6 +7,20 @@
 // isolated to a single, easily-swappable seam.
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+/// OAuth 2.0 **Web** client ID from the Firebase console
+/// (Authentication → Sign-in method → Google → *Web SDK configuration*).
+///
+/// On Android, `google_sign_in` v7 needs this to mint a Firebase-compatible ID
+/// token, **unless** a `google-services.json` that contains a web OAuth client
+/// is present in the Android project — that file makes the Gradle plugin emit a
+/// `default_web_client_id` resource which the plugin reads automatically. Leave
+/// this empty to rely on that resource; set it to override.
+///
+/// Until the owner enables the Google provider in the console (and adds the
+/// debug SHA-1), Google sign-in will surface a configuration error on-device.
+const String kGoogleServerClientId = '';
 
 /// A minimal, testable facade over [FirebaseAuth].
 ///
@@ -64,16 +78,61 @@ class AuthService {
     }
   }
 
-  /// Signs the current user out.
-  Future<void> signOut() => _auth.signOut();
+  /// Signs the current user out of both Firebase and Google.
+  Future<void> signOut() async {
+    // Best-effort Google sign-out so the account chooser reappears next time.
+    // Never let a Google disconnect failure block the Firebase sign-out.
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {
+      // Ignore — the user may never have signed in with Google.
+    }
+    await _auth.signOut();
+  }
 
-  /// Google sign-in placeholder.
+  /// Latch so the global [GoogleSignIn] singleton is initialized exactly once.
+  static bool _googleInitialized = false;
+
+  /// Runs the interactive Google sign-in flow and exchanges the resulting
+  /// Google ID token for a Firebase [UserCredential].
   ///
-  /// The `google_sign_in` package is not yet installed; this path is wired up
-  /// in M2. Calling it now always throws.
-  Future<UserCredential> signInWithGoogle() {
-    throw UnimplementedError(
-      'Google sign-in is wired in M2 once google_sign_in is added',
-    );
+  /// Uses `google_sign_in` v7: [GoogleSignIn.initialize] (once) then
+  /// [GoogleSignIn.authenticate]. Propagates:
+  /// - a [GoogleSignInException] (e.g. `code == canceled`) when the user
+  ///   dismisses the sheet or the platform is misconfigured, and
+  /// - a [FirebaseAuthException] when Firebase rejects the credential
+  ///   (e.g. `account-exists-with-different-credential`).
+  ///
+  /// Both are mapped to domain failures one layer up in `AuthRepository`.
+  Future<UserCredential> signInWithGoogle() async {
+    final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+
+    if (!_googleInitialized) {
+      await googleSignIn.initialize(
+        serverClientId:
+            kGoogleServerClientId.isEmpty ? null : kGoogleServerClientId,
+      );
+      _googleInitialized = true;
+    }
+
+    if (!googleSignIn.supportsAuthenticate()) {
+      throw UnsupportedError(
+        'Google sign-in via authenticate() is not supported on this platform.',
+      );
+    }
+
+    final GoogleSignInAccount account = await googleSignIn.authenticate();
+    final String? idToken = account.authentication.idToken;
+    if (idToken == null) {
+      throw FirebaseAuthException(
+        code: 'missing-google-id-token',
+        message: 'Google did not return an ID token. Check the Google '
+            'provider configuration (Web client ID / SHA-1).',
+      );
+    }
+
+    final OAuthCredential credential =
+        GoogleAuthProvider.credential(idToken: idToken);
+    return _auth.signInWithCredential(credential);
   }
 }

@@ -53,9 +53,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.read<AuthProvider>();
     await auth.signInWithGoogle();
     if (!mounted) return;
-    if (auth.errorMessage != null) {
+    if (auth.status == AuthStatus.authenticated) {
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    } else if (auth.errorMessage != null) {
       _showError(auth.errorMessage!);
     }
+    // Cancelled sign-in leaves status idle with no error — do nothing.
   }
 
   void _showError(String message) {
