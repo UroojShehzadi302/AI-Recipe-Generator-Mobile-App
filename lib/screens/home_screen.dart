@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/constants/sample_recipes.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
+import '../core/theme/app_text_styles.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/ai_assistant_card.dart';
 import '../core/widgets/category_chip.dart';
@@ -12,8 +13,10 @@ import '../core/widgets/profile_avatar.dart';
 import '../core/widgets/recipe_card.dart';
 import '../core/widgets/section_title.dart';
 import '../core/widgets/shimmer_loading.dart';
+import '../models/app_notification.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
 import '../routes/app_routes.dart';
 
@@ -194,23 +197,85 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        _circleIcon(Icons.notifications_none, () => _comingSoon('No notifications yet')),
+        _notificationBell(),
       ],
     );
   }
 
-  Widget _circleIcon(IconData icon, VoidCallback onTap) {
+  /// The notification bell with a live unread badge. Tapping it opens the
+  /// in-app notifications inbox.
+  Widget _notificationBell() {
+    final int unread = context.select<NotificationProvider, int>(
+      (p) => p.unreadCount,
+    );
+    return _circleIcon(
+      unread > 0 ? Icons.notifications_active : Icons.notifications_none,
+      _openNotifications,
+      badgeCount: unread,
+    );
+  }
+
+  Widget _circleIcon(IconData icon, VoidCallback onTap, {int badgeCount = 0}) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: SizedBox(
         width: 44,
         height: 44,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          shape: BoxShape.circle,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 22),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.rectangle,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: AppColors.background, width: 1.5),
+                  ),
+                  child: Center(
+                    child: Text(
+                      badgeCount > 9 ? '9+' : '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-        child: Icon(icon, color: AppColors.primary, size: 22),
       ),
+    );
+  }
+
+  void _openNotifications() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppDimensions.radiusXl),
+        ),
+      ),
+      builder: (_) => const _NotificationInboxSheet(),
     );
   }
 
@@ -390,6 +455,193 @@ class _RailEmpty extends StatelessWidget {
           'Nothing here yet',
           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
+      ),
+    );
+  }
+}
+
+/// Bottom-sheet inbox listing received push notifications.
+///
+/// Reads from [NotificationProvider]: shows a branded empty state when there
+/// are none, otherwise a scrollable list (title / body / relative time) with a
+/// "Mark all read" affordance in the header. Marks everything read when opened.
+class _NotificationInboxSheet extends StatefulWidget {
+  const _NotificationInboxSheet();
+
+  @override
+  State<_NotificationInboxSheet> createState() =>
+      _NotificationInboxSheetState();
+}
+
+class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final double maxHeight = MediaQuery.of(context).size.height * 0.7;
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const SizedBox(height: AppDimensions.spaceM),
+            // Grab handle.
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppDimensions.spaceL),
+              child: Row(
+                children: <Widget>[
+                  const Icon(Icons.notifications_none, color: AppColors.primary),
+                  const SizedBox(width: AppDimensions.spaceM),
+                  Text('Notifications', style: AppTextStyles.title),
+                  const Spacer(),
+                  Consumer<NotificationProvider>(
+                    builder: (context, notif, _) {
+                      if (notif.items.isEmpty) return const SizedBox.shrink();
+                      return TextButton(
+                        onPressed: notif.hasUnread ? notif.markAllRead : null,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                        child: const Text('Mark all read'),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: Consumer<NotificationProvider>(
+                builder: (context, notif, _) {
+                  final List<AppNotification> items = notif.items;
+                  if (items.isEmpty) return const _NotificationsEmpty();
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(bottom: AppDimensions.spaceL),
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const Divider(
+                      height: 1,
+                      color: AppColors.border,
+                    ),
+                    itemBuilder: (context, index) =>
+                        _NotificationTile(item: items[index]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A single notification row in the inbox.
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({required this.item});
+
+  final AppNotification item;
+
+  @override
+  Widget build(BuildContext context) {
+    final String title = item.title.isEmpty ? 'Notification' : item.title;
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: AppColors.primarySoft,
+        child: Icon(
+          item.read ? Icons.notifications_none : Icons.notifications_active,
+          color: AppColors.primary,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTextStyles.body.copyWith(
+          fontWeight: item.read ? FontWeight.w500 : FontWeight.w700,
+        ),
+      ),
+      subtitle: item.body.isEmpty
+          ? Text(_relativeTime(item.receivedAt), style: AppTextStyles.caption)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  item.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.subtitle,
+                ),
+                const SizedBox(height: 2),
+                Text(_relativeTime(item.receivedAt),
+                    style: AppTextStyles.caption),
+              ],
+            ),
+      isThreeLine: item.body.isNotEmpty,
+    );
+  }
+
+  /// A short, dependency-free relative timestamp ("just now", "5m ago", …).
+  static String _relativeTime(DateTime time) {
+    final Duration diff = DateTime.now().difference(time);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${time.day}/${time.month}/${time.year}';
+  }
+}
+
+/// Branded empty state for the notifications inbox.
+class _NotificationsEmpty extends StatelessWidget {
+  const _NotificationsEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.spaceL,
+        AppDimensions.spaceL,
+        AppDimensions.spaceL,
+        AppDimensions.spaceXxl,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              color: AppColors.primarySoft,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.notifications_off_outlined,
+              color: AppColors.primary,
+              size: 30,
+            ),
+          ),
+          const SizedBox(height: AppDimensions.spaceL),
+          Text(
+            'No notifications yet',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: AppDimensions.spaceXs),
+          Text(
+            "We'll let you know when something tasty comes up.",
+            style: AppTextStyles.subtitle,
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
