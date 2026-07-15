@@ -73,6 +73,16 @@ class FirestoreFailure extends Failure {
   ]);
 }
 
+/// Failures from Cloud Storage uploads/downloads (avatar upload, bucket not
+/// enabled, storage rules, etc.).
+class StorageFailure extends Failure {
+  /// Creates a [StorageFailure] with an optional custom [message].
+  const StorageFailure([
+    super.message =
+        "Couldn't upload your photo. Please try again in a moment.",
+  ]);
+}
+
 /// Input validation problems surfaced as a failure value (as opposed to an
 /// inline form validator message).
 class ValidationFailure extends Failure {

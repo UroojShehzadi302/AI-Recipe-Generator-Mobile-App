@@ -9,6 +9,7 @@ import '../core/utils/responsive.dart';
 import '../core/widgets/primary_button.dart';
 import '../core/widgets/profile_avatar.dart';
 import '../providers/auth_provider.dart';
+import '../providers/recipe_provider.dart';
 import '../routes/app_routes.dart';
 
 /// Profile tab — user info and account actions.
@@ -82,19 +83,44 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
+  /// A custom About dialog — no "View licenses" button (unlike the framework
+  /// [showAboutDialog]).
   void _showAbout(BuildContext context) {
-    showAboutDialog(
+    showDialog<void>(
       context: context,
-      applicationName: 'AI Recipe Generator',
-      applicationVersion: 'Version $_appVersion',
-      applicationIcon: const Icon(Icons.restaurant_menu, color: AppColors.primary),
-      children: const [
-        SizedBox(height: 12),
-        Text(
-          'Discover, generate, and save recipes with an AI cooking assistant.',
-          style: AppTextStyles.subtitle,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppDimensions.brLg),
+        title: Row(
+          children: [
+            const Icon(Icons.restaurant_menu, color: AppColors.primary),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text('AI Recipe Generator', style: AppTextStyles.title),
+            ),
+          ],
         ),
-      ],
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Discover, generate, and save recipes with an AI cooking '
+              'assistant.',
+              style: AppTextStyles.subtitle,
+            ),
+            SizedBox(height: 12),
+            Text('Version $_appVersion', style: AppTextStyles.caption),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -103,6 +129,13 @@ class ProfileScreen extends StatelessWidget {
     final user = context.watch<AuthProvider>().user;
     final name = (user?.name ?? '').trim();
     final email = (user?.email ?? '').trim();
+
+    // Live counts from the actual loaded lists — the server-maintained
+    // UserModel counters stay 0 until Cloud Functions land, so use the real
+    // Firestore data (warmed by MainShell / the Favorites + Saved tabs).
+    final recipe = context.watch<RecipeProvider>();
+    final int favoritesCount = recipe.favorites.length;
+    final int savedCount = recipe.saved.length;
 
     return SafeArea(
       child: Center(
@@ -121,10 +154,14 @@ class ProfileScreen extends StatelessWidget {
               const _Header(title: 'Profile'),
               const SizedBox(height: 20),
               Center(
-                child: ProfileAvatar(
-                  radius: 48,
-                  imageUrl: user?.photoUrl,
-                  fallbackInitial: name.isNotEmpty ? name[0] : null,
+                child: GestureDetector(
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.editProfile),
+                  child: ProfileAvatar(
+                    radius: 48,
+                    imageUrl: user?.photoUrl,
+                    fallbackInitial: name.isNotEmpty ? name[0] : null,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -146,21 +183,19 @@ class ProfileScreen extends StatelessWidget {
                   style: AppTextStyles.subtitle,
                 ),
               ),
-              const SizedBox(height: 12),
-              _providerChip(user?.provider, user?.emailVerified ?? false),
               const SizedBox(height: 24),
               Row(
                 children: [
                   _statCard(
                     'Favorites',
-                    user?.favoritesCount ?? 0,
+                    favoritesCount,
                     Icons.favorite,
                     () => _goToTab(context, 1),
                   ),
                   const SizedBox(width: 14),
                   _statCard(
                     'Saved',
-                    user?.generatedCount ?? 0,
+                    savedCount,
                     Icons.bookmark,
                     () => _goToTab(context, 3),
                   ),
@@ -180,63 +215,6 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// A small chip showing the sign-in method + email-verification state.
-  Widget _providerChip(String? provider, bool verified) {
-    final bool isGoogle = (provider ?? '').toLowerCase() == 'google';
-    final IconData icon = isGoogle ? Icons.g_mobiledata : Icons.mail_outline;
-    final String label = isGoogle ? 'Google account' : 'Email sign-in';
-
-    return Center(
-      child: Wrap(
-        spacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _chip(icon, label, AppColors.primary, AppColors.primarySoft),
-          if (isGoogle || verified)
-            _chip(
-              Icons.verified,
-              'Verified',
-              AppColors.success,
-              AppColors.success.withValues(alpha: 0.12),
-            )
-          else
-            _chip(
-              Icons.error_outline,
-              'Unverified',
-              AppColors.secondary,
-              AppColors.secondary.withValues(alpha: 0.14),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(IconData icon, String label, Color fg, Color bg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: fg),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: fg,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -304,7 +282,7 @@ class ProfileScreen extends StatelessWidget {
           _menuRow(
             Icons.edit_outlined,
             'Edit Profile',
-            () => _comingSoon(context, 'Profile editing arrives soon'),
+            () => Navigator.pushNamed(context, AppRoutes.editProfile),
           ),
           _divider(),
           _menuRow(
