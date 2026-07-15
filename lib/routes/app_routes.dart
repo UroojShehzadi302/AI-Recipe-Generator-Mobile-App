@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/recipe_model.dart';
 import '../screens/category_results_screen.dart';
+import '../screens/edit_profile_screen.dart';
 import '../screens/forgot_password_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/main_shell.dart';
@@ -31,6 +32,7 @@ class AppRoutes {
   static const String saved = '/saved';
   static const String chat = '/chat';
   static const String profile = '/profile';
+  static const String editProfile = '/edit-profile';
   static const String settings = '/settings';
 
   /// Resolves a [RouteSettings] into a [MaterialPageRoute].
@@ -54,6 +56,8 @@ class AppRoutes {
         return _page(const _ComingSoon(routeName: recipeDetail), settings);
       case search:
         return _page(const SearchScreen(), settings);
+      case editProfile:
+        return _page(const EditProfileScreen(), settings);
       case category:
         final args = settings.arguments;
         if (args is String) {

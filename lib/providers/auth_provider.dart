@@ -5,6 +5,8 @@
 // optional user-facing [errorMessage], and never throws to the UI — repository
 // [Failure]s are caught and surfaced as state.
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/error/failure.dart';
@@ -112,6 +114,32 @@ class AuthProvider extends ChangeNotifier {
       _setError('Google sign-in failed. Please try again.');
     }
     notifyListeners();
+  }
+
+  /// Updates the signed-in user's display [name] and, optionally, their avatar
+  /// ([avatarFile]).
+  ///
+  /// On success the in-memory [user] is refreshed and `true` is returned. On
+  /// failure sets [AuthStatus.error] + [errorMessage] and returns `false`
+  /// (never throws to the UI). Does not change the authenticated state.
+  Future<bool> updateProfile({required String name, File? avatarFile}) async {
+    _setLoading();
+    notifyListeners();
+    try {
+      _user = await _repository.updateProfile(name: name, avatarFile: avatarFile);
+      _status = AuthStatus.authenticated;
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } on Failure catch (f) {
+      _setError(f.message);
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _setError('Could not update your profile. Please try again.');
+      notifyListeners();
+      return false;
+    }
   }
 
   /// Signs the current user out and returns to [AuthStatus.idle].

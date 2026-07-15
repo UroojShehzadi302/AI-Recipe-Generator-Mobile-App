@@ -17,7 +17,7 @@ Design docs live in `documents/`: `prd.pdf`, `trd.pdf`, `afd.pdf`, `ui_ux design
 6. State management is **Provider** (mandated by the docs).
 
 ## Tech stack
-Flutter 3.x / Dart, Material 3, Provider, Firebase (Auth, Firestore, Storage-planned), **Google Sign-In** (`google_sign_in ^7.2.0`), **Google Gemini via the free Developer API called directly over `http`** (dev phase — Cloud Functions is the production target, see D7). Chat markdown uses a small in-house renderer (`markdown_text.dart`, no package) — supports headings/bold/italic/code/lists **plus blockquotes and pipe tables** (defensive: malformed tables degrade to text, never throw). Fonts: **Poppins bundled locally** as assets (`assets/fonts/`, weights 400/500/600/700; family `'Poppins'` referenced by `AppTextStyles` + `ThemeData.fontFamily`). `google_fonts` **removed** — no runtime font fetch. (Editing bundled fonts needs a full stop+run, not hot reload.)
+Flutter 3.x / Dart, Material 3, Provider, Firebase (Auth, Firestore, **Storage** via `firebase_storage` for avatars), **Google Sign-In** (`google_sign_in ^7.2.0`), **image_picker** (avatar gallery pick), **Google Gemini via the free Developer API called directly over `http`** (dev phase — Cloud Functions is the production target, see D7). Chat markdown uses a small in-house renderer (`markdown_text.dart`, no package) — supports headings/bold/italic/code/lists **plus blockquotes and pipe tables** (defensive: malformed tables degrade to text, never throw). Fonts: **Poppins bundled locally** as assets (`assets/fonts/`, weights 400/500/600/700; family `'Poppins'` referenced by `AppTextStyles` + `ThemeData.fontFamily`). `google_fonts` **removed** — no runtime font fetch. (Editing bundled fonts needs a full stop+run, not hot reload.)
 
 ## Architecture / folders
 ```
@@ -37,13 +37,15 @@ lib/
               category_chip, recipe_card, ai_assistant_card, markdown_text,
               shimmer_loading   # in-house shimmer + RecipeCard/Rail/Grid skeletons (no package)
   models/       recipe_model (Recipe/Nutrition/Ingredient), user_model, chat_message, chat_session
-  services/     auth_service, firestore_service,
-                ai_service (interface), gemini_direct_service (dev Gemini impl),
+  services/     auth_service, firestore_service, storage_service (avatar upload),
+                meal_db_service (TheMealDB catalog), ai_service (interface),
+                gemini_direct_service (dev Gemini impl),
                 unconfigured_ai_service (no-key no-op)            # thin SDK seams; Firebase resolved LAZILY
   repositories/ auth_repository, user_repository, recipe_repository, chat_repository
   providers/    auth_provider, recipe_provider, chat_provider     # ChangeNotifiers
   screens/      splash, login, register, forgot_password, main_shell, home,
-                recipe_detail, favorites, saved, profile, ai_hub (Generate|Chat)
+                recipe_detail, favorites, saved, profile, edit_profile,
+                search, category_results, ai_hub (Generate|Chat)
 test/           widget_test, recipe_detail_test, auth_provider_google_test,
                 gemini_direct_service_test, ai_hub_screen_test, markdown_text_test,
                 chat_provider_history_test
@@ -78,13 +80,15 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
 - ✅ M7 Recipe Detail (full page; a prior blank-body bug from a greedy `Center` in the bottom bar is fixed + guarded by test)
 - ✅ M8 Favorites & Saved (real Firestore reads/writes; hearts on Home + Detail; Favorites/Saved tabs)
 - ✅ Responsive UI + shimmer loading — `core/utils/responsive.dart` (breakpoints 600/1024; grids go 2→3→4 columns, page padding + rail card/height scale up on wider screens) applied to Home, Search, Categories, Favorites, Saved. Loading states use a dependency-free shimmer (`core/widgets/shimmer_loading.dart`: `Shimmer` + `RecipeCardSkeleton`/`RecipeRailSkeleton`/`RecipeGridSkeleton`) instead of plain spinners on Home rails, Search, and Categories. Tests: `test/responsive_shimmer_test.dart`.
-- ✅ Profile tab — full page: avatar + name + email, sign-in-method + email-verification chips, tappable **Favorites/Saved** stat cards, a menu section (My Favorites / Saved Recipes / Ask AI switch tabs via `onNavigateTab` from `MainShell`; Edit Profile = M11 stub; About = real `showAboutDialog`), **Log Out with a confirm dialog**, and an app-version footer. Responsive (centered, `maxContentWidth`). Session-restore loads the user model. (Edit-profile screen itself deferred to M11.)
+- ✅ Profile tab — full page: avatar (tap → Edit Profile) + name + email, tappable **Favorites/Saved** stat cards showing **live counts** (from the loaded `RecipeProvider.favorites`/`saved` lists, since the server-maintained `UserModel` counters stay 0 until Cloud Functions land), a menu section (My Favorites / Saved Recipes / Ask AI switch tabs via `onNavigateTab` from `MainShell`; **Edit Profile** → real screen; **About** = custom dialog, no "view licenses"), **Log Out with a confirm dialog**, app-version footer. Responsive (centered, `maxContentWidth`).
+- ✅ **Edit Profile (M11)** — `screens/edit_profile_screen.dart`: change display name + **upload avatar** (gallery via `image_picker`). Flow: `AuthProvider.updateProfile(name, avatarFile)` → `AuthRepository.updateProfile` → `StorageService.uploadAvatar` (Cloud Storage `avatars/{uid}.jpg`) + FirebaseAuth `updateDisplayName`/`updatePhotoURL` + Firestore `/users/{uid}` upsert. New `StorageFailure` type. Name edit works today; **avatar upload needs Cloud Storage enabled + `storage.rules` deployed** (see Firebase console state).
 - ✅ M6 AI Generate & M9 AI Chat — **implemented end-to-end** (backend + UI). Service: `GeminiDirectService` (direct Gemini REST over `http`); recipe generation uses JSON-mode (`responseSchema` → `Recipe`), chat scoped to cooking; verified live. UI: `screens/ai_hub_screen.dart` = the "Ask AI" tab (index 2 in `main_shell`), a segmented **Generate | Chat** hub (per D1). Generate → prompt → `RecipeProvider.generate` → `RecipeDetailScreen` → Save. Chat → bubbles + typing dots + composer → `ChatProvider.sendMessage`. AI replies render markdown via `core/widgets/markdown_text.dart` (headings/bold/italic/code/lists — a lightweight token-styled renderer, no external package); the user's own bubbles stay plain text. **Chat history:** header has **New chat** + **History** actions; conversations persist per-user to `users/{uid}/chats/{chatId}` (+ `messages` subcollection) via `ChatRepository` (createChat/touchChat/getChats/getMessages/deleteChat/generateTitle) and `ChatProvider` (newChat/openChat/loadSessions/deleteSession); history shown in a bottom sheet (`_HistorySheet`). **Titles are AI-generated:** a new chat gets a provisional truncated-prompt title, then `AiService.generateTitle` (extra Gemini call, `_titleSystemPrompt`) upgrades it from the first exchange — runs *after* the reply is shown so it adds no perceived latency; best-effort (keeps provisional title on failure). Persistence is best-effort and requires sign-in (uid); signed-out chat still works but isn't saved. `ChatSession` model = `models/chat_session.dart`. Key in git-ignored `env.json`; **model = `gemini-flash-latest`** (pinned `gemini-2.0-flash` has **zero free-tier quota** on this project — use the `-latest` alias). M3 (full backend/Functions) deferred to production.
 
 ## Firebase console state
 - Project: `ai-recipe-generator-db27c` (treat as **dev**; prod not created yet).
 - ✅ Email/Password auth enabled (the earlier `CONFIGURATION_NOT_FOUND` was this being off).
 - ✅ Firestore created — region `asia-south1` (Mumbai). **Real rules authored** in `firestore.rules` (+ `firestore.indexes.json`, wired via `firebase.json`): owner-only `users/{uid}/**` (covers favorites / generatedRecipes / chats / messages), read-only `/recipes` + `/home_feed`, deny-by-default. **⚠️ NOT deployed yet** — still live on open **test-mode** rules. Owner deploys with: `firebase login && firebase deploy --only firestore:rules,firestore:indexes --project ai-recipe-generator-db27c`. (Rules intentionally diverge from backend doc §8 — no App Check / Functions-only writes — until that infra lands; see the header comment in `firestore.rules`.)
+- ⚠️ **Cloud Storage NOT enabled yet** — needed for **avatar upload** (Edit Profile). Owner: Firebase console → **Storage → Get started**, then deploy the authored `storage.rules` (owner-writable `avatars/{uid}.jpg`, public read) via `firebase deploy --only storage --project ai-recipe-generator-db27c`. Until then, avatar upload throws a `StorageFailure` ("Couldn't upload your photo") — name editing still works.
 - API key: advised to restrict in Google Cloud Console (Android app + SHA-1). It's a client identifier, not a real secret; GitHub secret-scan alert is a false positive for Firebase client keys.
 - Android package name: `com.example.ai_recipe_generator` (still the default `com.example` — must change before publishing).
 - Debug SHA-1: `C1:0E:2C:BE:D8:F4:4D:4D:71:3E:93:E0:ED:D9:68:C0:58:F3:3A:53` (needed for Google Sign-In + key restriction).
@@ -113,6 +117,7 @@ Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5
 
 **Owner-only (blockers, not code):**
 - **Deploy** the authored `firestore.rules` (see Firebase console state) — the app stays on open **test-mode** until then. ⚠️ security gap. `firebase login && firebase deploy --only firestore:rules,firestore:indexes --project ai-recipe-generator-db27c`.
+- **Enable Cloud Storage + deploy `storage.rules`** so avatar upload (Edit Profile) works: console → Storage → Get started, then `firebase deploy --only storage --project ai-recipe-generator-db27c`.
 - **Smoke-test Google Sign-In** on-device (console setup + `google-services.json` are now in place).
 - Verify TheMealDB reachability on the device: if Home's Popular/Quick rails only ever show the `SampleRecipes` seed (never live dishes), the device/emulator can't reach `themealdb.com` — network/emulator issue, not app logic.
 
