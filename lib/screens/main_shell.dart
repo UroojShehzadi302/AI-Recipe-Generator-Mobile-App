@@ -47,7 +47,7 @@ class _MainShellState extends State<MainShell> {
       const FavoritesScreen(),
       const AiHubScreen(),
       const SavedScreen(),
-      const ProfileScreen(),
+      ProfileScreen(onNavigateTab: _select),
     ];
 
     return Scaffold(
