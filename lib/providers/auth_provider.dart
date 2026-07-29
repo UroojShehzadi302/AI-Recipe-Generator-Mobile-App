@@ -142,6 +142,111 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Whether the signed-in account is password-backed (vs Google-only).
+  ///
+  /// Lets the UI ask for a password before a destructive action instead of
+  /// re-running the Google sheet, and vice versa.
+  bool get hasPasswordProvider => _repository.hasPasswordProvider;
+
+  /// Whether the signed-in account's email has been verified.
+  bool get isEmailVerified => _repository.isEmailVerified;
+
+  /// Re-sends the verification email. Returns `true` when it went out.
+  ///
+  /// Never throws to the UI; on failure [errorMessage] carries the reason.
+  Future<bool> resendEmailVerification() async {
+    try {
+      await _repository.sendEmailVerification();
+      return true;
+    } on Failure catch (f) {
+      _errorMessage = f.message;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = 'Could not send the verification email.';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Re-checks verification against the server and refreshes the banner.
+  ///
+  /// Deliberately does not touch [status]: this runs in the background when the
+  /// profile screen opens, and flipping the app into a loading state for a
+  /// silent check would be visible churn for no reason.
+  Future<bool> refreshEmailVerification() async {
+    final bool verified = await _repository.refreshVerificationStatus();
+    if (verified && _user != null && !_user!.emailVerified) {
+      _user = _user!.copyWith(emailVerified: true);
+      notifyListeners();
+    }
+    return verified;
+  }
+
+  /// Changes the signed-in user's password.
+  ///
+  /// Returns `true` on success; on failure sets [AuthStatus.error] +
+  /// [errorMessage] and returns `false` (never throws to the UI).
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    _setLoading();
+    notifyListeners();
+    try {
+      await _repository.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      _status = AuthStatus.authenticated;
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } on Failure catch (f) {
+      _setError(f.message);
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _setError('Could not change your password. Please try again.');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Permanently deletes the signed-in account and every trace of its data.
+  ///
+  /// Returns `true` once the account is gone (state resets to
+  /// [AuthStatus.idle], as after a sign-out). Returns `false` if the user
+  /// cancelled re-authentication — in that case nothing was deleted — or if the
+  /// deletion failed, in which case [errorMessage] explains why.
+  Future<bool> deleteAccount({String? password}) async {
+    _setLoading();
+    notifyListeners();
+    try {
+      final bool deleted = await _repository.deleteAccount(password: password);
+      if (!deleted) {
+        // Cancelled: restore the signed-in state, no error to report.
+        _status = AuthStatus.authenticated;
+        _errorMessage = null;
+        notifyListeners();
+        return false;
+      }
+      _user = null;
+      _status = AuthStatus.idle;
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } on Failure catch (f) {
+      _setError(f.message);
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _setError('Could not delete your account. Please try again.');
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Signs the current user out and returns to [AuthStatus.idle].
   Future<void> signOut() async {
     _setLoading();

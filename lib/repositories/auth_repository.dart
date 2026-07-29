@@ -164,6 +164,133 @@ class AuthRepository {
     }
   }
 
+  /// Whether the signed-in account is password-backed (vs Google-only).
+  ///
+  /// The UI uses this to decide whether a destructive action should prompt for
+  /// a password or re-run the Google flow.
+  bool get hasPasswordProvider => _authService.hasPasswordProvider;
+
+  /// Whether the signed-in account's email address has been verified.
+  ///
+  /// Google accounts arrive verified; email/password accounts are not until the
+  /// user clicks the link. Reflects the cached token — call
+  /// [refreshVerificationStatus] to re-check against the server.
+  bool get isEmailVerified => _authService.currentUser?.emailVerified ?? false;
+
+  /// Re-sends the verification email to the signed-in user.
+  Future<void> sendEmailVerification() async {
+    try {
+      await _authService.sendEmailVerification();
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_authFailureMessage(e));
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Re-reads the account from the server and reports whether the email is now
+  /// verified. Returns `false` (rather than throwing) if the refresh fails, so
+  /// a flaky network just leaves the banner in place.
+  Future<bool> refreshVerificationStatus() async {
+    try {
+      await _authService.reloadUser();
+      return isEmailVerified;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Re-authenticates the current user, which Firebase requires before a
+  /// password change or account deletion.
+  ///
+  /// Pass [password] for a password-backed account; omit it to re-run Google
+  /// sign-in. Returns `false` when the user dismisses the Google sheet — a
+  /// cancellation is a choice, not an error, and the caller should quietly
+  /// abandon the operation rather than show a failure.
+  Future<bool> reauthenticate({String? password}) async {
+    try {
+      if (password != null) {
+        await _authService.reauthenticateWithPassword(password);
+      } else {
+        await _authService.reauthenticateWithGoogle();
+      }
+      return true;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        return false;
+      }
+      throw AuthFailure(_googleFailureMessage(e));
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_authFailureMessage(e));
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Changes the signed-in user's password to [newPassword].
+  ///
+  /// [currentPassword] is used to re-authenticate first — Firebase rejects a
+  /// password change on a stale session with `requires-recent-login`, and
+  /// asking up front is a far better experience than failing and then asking.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _authService.reauthenticateWithPassword(currentPassword);
+      await _authService.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_authFailureMessage(e));
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Permanently deletes the signed-in account and all of its data.
+  ///
+  /// Order is deliberate: Firestore data first, then the auth account. Deleting
+  /// the auth account first would revoke the very credentials the security
+  /// rules need to authorise the data deletion, stranding the user's documents
+  /// permanently unreachable and undeletable.
+  ///
+  /// Pass [password] for a password-backed account; omit it to re-authenticate
+  /// via Google. Re-authentication is mandatory — Firebase refuses to delete an
+  /// account on a stale session, and it is the only thing standing between an
+  /// unattended phone and an irreversible wipe.
+  ///
+  /// Returns `false` if the user cancelled re-authentication; in that case
+  /// nothing at all was deleted.
+  Future<bool> deleteAccount({String? password}) async {
+    final User? user = _authService.currentUser;
+    if (user == null) {
+      throw const AuthFailure('You are not signed in.');
+    }
+    final String uid = user.uid;
+
+    if (!await reauthenticate(password: password)) return false;
+
+    try {
+      await _userRepository.deleteUserData(uid);
+    } catch (e) {
+      // The account still exists and still owns its data — surfacing this is
+      // honest, and a retry is safe because deletion is idempotent.
+      throw UnknownFailure(
+        'Could not delete your data. Nothing was removed — please try again. '
+        '(${ErrorMapper.generic(e)})',
+      );
+    }
+
+    try {
+      await _authService.deleteAccount();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_authFailureMessage(e));
+    } catch (e) {
+      throw UnknownFailure(ErrorMapper.generic(e));
+    }
+  }
+
   /// Updates the signed-in user's display [name] and, when [avatarFile] is
   /// given, stores it as their avatar.
   ///

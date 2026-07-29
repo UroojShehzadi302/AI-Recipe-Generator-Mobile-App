@@ -78,6 +78,98 @@ class AuthService {
     }
   }
 
+  /// Re-fetches the signed-in user from the server.
+  ///
+  /// `emailVerified` is baked into the cached ID token, so it stays stale after
+  /// the user clicks the link in their inbox until the token is refreshed. This
+  /// is what makes "I verified, why is it still asking me?" go away.
+  Future<void> reloadUser() async {
+    await _auth.currentUser?.reload();
+  }
+
+  /// Whether the signed-in user has an email/password credential.
+  ///
+  /// Drives how re-authentication is done before a destructive action:
+  /// password-backed accounts prompt for the password, Google-only accounts
+  /// re-run the Google flow.
+  bool get hasPasswordProvider =>
+      _auth.currentUser?.providerData
+          .any((UserInfo p) => p.providerId == 'password') ??
+      false;
+
+  /// Re-authenticates a password-backed account with [password].
+  ///
+  /// Firebase requires a recent login before deleting an account or changing a
+  /// password. Throws a [FirebaseAuthException] (`wrong-password`) on mismatch.
+  Future<void> reauthenticateWithPassword(String password) async {
+    final User? user = _auth.currentUser;
+    final String? email = user?.email;
+    if (user == null || email == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in email account to re-authenticate.',
+      );
+    }
+    await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+  }
+
+  /// Re-authenticates a Google-backed account by re-running the Google flow.
+  Future<void> reauthenticateWithGoogle() async {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in account to re-authenticate.',
+      );
+    }
+
+    final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+    if (!_googleInitialized) {
+      await googleSignIn.initialize(
+        serverClientId:
+            kGoogleServerClientId.isEmpty ? null : kGoogleServerClientId,
+      );
+      _googleInitialized = true;
+    }
+
+    final GoogleSignInAccount account = await googleSignIn.authenticate();
+    final String? idToken = account.authentication.idToken;
+    if (idToken == null) {
+      throw FirebaseAuthException(
+        code: 'missing-google-id-token',
+        message: 'Google did not return an ID token.',
+      );
+    }
+    await user.reauthenticateWithCredential(
+      GoogleAuthProvider.credential(idToken: idToken),
+    );
+  }
+
+  /// Updates the signed-in user's password. Requires a recent login.
+  Future<void> updatePassword(String newPassword) async {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in account.',
+      );
+    }
+    await user.updatePassword(newPassword);
+  }
+
+  /// Permanently deletes the signed-in Firebase Auth account.
+  ///
+  /// Throws `requires-recent-login` when the session is stale — callers must
+  /// re-authenticate first. Deleting the user's Firestore data is the caller's
+  /// job (see `AuthRepository.deleteAccount`).
+  Future<void> deleteAccount() async {
+    final User? user = _auth.currentUser;
+    if (user == null) return;
+    await user.delete();
+  }
+
   /// Signs the current user out of both Firebase and Google.
   Future<void> signOut() async {
     // Best-effort Google sign-out so the account chooser reappears next time.

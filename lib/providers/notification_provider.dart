@@ -82,7 +82,10 @@ class NotificationProvider extends ChangeNotifier {
     try {
       _token = await _service.getToken();
       if (_token != null) {
-        debugPrint('FCM token: $_token');
+        // Debug builds only. The FCM token identifies this device and lets
+        // anyone holding it push notifications to it, so it must never reach a
+        // release log where other apps could read it via logcat.
+        if (kDebugMode) debugPrint('FCM token: $_token');
       } else {
         debugPrint(
           'FCM token is NULL — device likely has no Google Play Services '
@@ -151,11 +154,14 @@ class NotificationProvider extends ChangeNotifier {
 
   /// Adds a notification to the top of the inbox, de-duplicating by id.
   void _add(AppNotification notification) {
-    debugPrint(
-      'FCM message received (foreground/open): '
-      'title="${notification.title}" body="${notification.body}" '
-      'id="${notification.id}"',
-    );
+    // Message content is user-facing data — debug builds only.
+    if (kDebugMode) {
+      debugPrint(
+        'FCM message received (foreground/open): '
+        'title="${notification.title}" body="${notification.body}" '
+        'id="${notification.id}"',
+      );
+    }
     final String key = notification.dedupeKey;
     if (_items.any((AppNotification n) => n.dedupeKey == key)) return;
 

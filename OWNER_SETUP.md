@@ -28,23 +28,16 @@ your local `env.json` — no need to generate a new one.
 
 ---
 
-## 2. Deploy Firestore security rules (⚠️ security — currently open test-mode)
+## 2. ✅ DONE — Firestore security rules deployed (2026-07-29)
 
-The real rules are authored in `firestore.rules` but **not deployed** — the DB is
-still on open test-mode (anyone can read/write). Two ways:
+The rules in `firestore.rules` are **live**; the open test-mode rules are gone.
+Posture: owner-only `users/{uid}/**`, read-only `/recipes` + `/home_feed`,
+deny-by-default.
 
-**Option A — Firebase CLI (deploys rules + indexes):**
+Redeploy after any edit to `firestore.rules`:
 ```bash
-npm install -g firebase-tools          # once
-firebase login                         # opens browser, sign in
-cd d:/MyProjects/ai_recipe_generator
 firebase deploy --only firestore:rules,firestore:indexes --project ai-recipe-generator-db27c
 ```
-
-**Option B — Console (rules only, no CLI):**
-1. Console → **Firestore Database → Rules** tab.
-2. Open `firestore.rules` from the repo, copy everything, paste it in.
-3. Click **Publish**.
 
 ---
 
@@ -79,6 +72,39 @@ in `android/app/`). Just verify on-device:
 
 ---
 
+## 5. Release signing key (required before ANY Play Store upload)
+
+The release build currently falls back to the **debug** keystore, which is shared
+by every Flutter install on the machine — anyone can sign an app with it, so Play
+rejects it. Generate a real key once and keep it forever: **lose it and you can
+never update the app on Play again.**
+
+```bash
+keytool -genkey -v -keystore %USERPROFILE%\upload-keystore.jks ^
+  -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Then create `android/key.properties` (already git-ignored — **never commit it**):
+
+```properties
+storePassword=<the store password you just typed>
+keyPassword=<the key password you just typed>
+keyAlias=upload
+storeFile=C:/Users/<you>/upload-keystore.jks
+```
+
+`android/app/build.gradle.kts` picks it up automatically; with the file absent it
+silently uses debug signing so local `flutter run --release` still works.
+
+Back the `.jks` file up somewhere safe and offline.
+
+> After creating the key, add its SHA-1 to Firebase (Project settings → your
+> Android app → Add fingerprint) and re-download `google-services.json`, or
+> **Google Sign-In will fail in release builds** — it is bound to the signing
+> certificate.
+
+---
+
 ## Notes / deferred (not blocking)
 
 - **Cloud Storage**: intentionally **not used** (Firebase now needs Blaze for it).
@@ -88,3 +114,10 @@ in `android/app/`). Just verify on-device:
   only at a real production cutover (new Firebase app + SHA-1 + re-download config).
 - **M3 / Cloud Functions** is the production path (App Check, rate limits, key never
   ships) — deferred; dev deliberately avoids Blaze.
+- **Privacy Policy + Terms URLs** are still needed for the Play Store listing (any
+  app that collects an email address must link a privacy policy). Nothing in the
+  code blocks on this; it is a store-listing field. Host a page anywhere public
+  (GitHub Pages works) and paste the URL into the Play Console.
+- **Crash reporting** is not wired. All uncaught errors funnel through
+  `_reportError` in `lib/main.dart`, which currently logs — adding Crashlytics
+  later is a one-line change there.

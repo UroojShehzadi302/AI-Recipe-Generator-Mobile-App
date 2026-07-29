@@ -183,7 +183,9 @@ class ProfileScreen extends StatelessWidget {
                   style: AppTextStyles.subtitle,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+              const _EmailVerificationBanner(),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   _statCard(
@@ -284,18 +286,44 @@ class ProfileScreen extends StatelessWidget {
             'Edit Profile',
             () => Navigator.pushNamed(context, AppRoutes.editProfile),
           ),
+          // Only password-backed accounts have a password to change; a
+          // Google-only account would land on a form it can never satisfy.
+          if (context.read<AuthProvider>().hasPasswordProvider) ...<Widget>[
+            _divider(),
+            _menuRow(
+              Icons.lock_outline,
+              'Change Password',
+              () => Navigator.pushNamed(context, AppRoutes.changePassword),
+            ),
+          ],
           _divider(),
           _menuRow(
             Icons.info_outline,
             'About',
             () => _showAbout(context),
           ),
+          _divider(),
+          _menuRow(
+            Icons.delete_forever_outlined,
+            'Delete Account',
+            () => Navigator.pushNamed(context, AppRoutes.deleteAccount),
+            destructive: true,
+          ),
         ],
       ),
     );
   }
 
-  Widget _menuRow(IconData icon, String label, VoidCallback onTap) {
+  /// A single menu row. [destructive] tints it with the error colour so a
+  /// dangerous action never looks like an ordinary one.
+  Widget _menuRow(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool destructive = false,
+  }) {
+    final Color accent = destructive ? AppColors.error : AppColors.primary;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
@@ -307,16 +335,25 @@ class ProfileScreen extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: AppColors.primarySoft,
+                color: destructive
+                    ? AppColors.error.withValues(alpha: 0.10)
+                    : AppColors.primarySoft,
                 borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
               ),
-              child: Icon(icon, size: 20, color: AppColors.primary),
+              child: Icon(icon, size: 20, color: accent),
             ),
             const SizedBox(width: 14),
-            Expanded(child: Text(label, style: AppTextStyles.body)),
-            const Icon(
+            Expanded(
+              child: Text(
+                label,
+                style: destructive
+                    ? AppTextStyles.body.copyWith(color: AppColors.error)
+                    : AppTextStyles.body,
+              ),
+            ),
+            Icon(
               Icons.chevron_right,
-              color: AppColors.textSecondary,
+              color: destructive ? AppColors.error : AppColors.textSecondary,
               size: 22,
             ),
           ],
@@ -332,6 +369,135 @@ class ProfileScreen extends StatelessWidget {
         endIndent: 16,
         color: AppColors.border,
       );
+}
+
+/// Shows an "unverified email" notice with a resend action, and disappears once
+/// the address is confirmed.
+///
+/// Stateful on its own so [ProfileScreen] can stay stateless: the verified flag
+/// lives in the cached ID token and is stale until the account is re-read from
+/// the server, which this does on mount. Without that refresh the banner would
+/// still be there after the user clicked the link, which reads as broken.
+///
+/// Renders nothing for Google accounts (already verified) and nothing while the
+/// first check is in flight, so a verified user never sees it flash.
+class _EmailVerificationBanner extends StatefulWidget {
+  const _EmailVerificationBanner();
+
+  @override
+  State<_EmailVerificationBanner> createState() =>
+      _EmailVerificationBannerState();
+}
+
+class _EmailVerificationBannerState extends State<_EmailVerificationBanner> {
+  bool _checking = true;
+  bool _verified = true;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  Future<void> _check() async {
+    final auth = context.read<AuthProvider>();
+    final bool verified = await auth.refreshEmailVerification();
+    if (!mounted) return;
+    setState(() {
+      _verified = verified;
+      _checking = false;
+    });
+  }
+
+  Future<void> _resend() async {
+    setState(() => _sending = true);
+    final auth = context.read<AuthProvider>();
+    final bool sent = await auth.resendEmailVerification();
+    if (!mounted) return;
+    setState(() => _sending = false);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            sent
+                ? 'Verification email sent — check your inbox.'
+                : auth.errorMessage ?? 'Could not send the email.',
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checking || _verified) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.mark_email_unread_outlined,
+              color: AppColors.primaryDark, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Verify your email',
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Confirm your address so you can recover your account if you '
+                  'lose your password.',
+                  style: AppTextStyles.caption,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: _sending ? null : _resend,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(_sending ? 'Sending…' : 'Resend email'),
+                    ),
+                    const SizedBox(width: 18),
+                    TextButton(
+                      onPressed: _check,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text("I've verified"),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The screen's leading title row (matches the Favorites/Saved tab headers).

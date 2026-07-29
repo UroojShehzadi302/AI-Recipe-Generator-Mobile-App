@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
@@ -20,11 +23,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Logged so a background/terminated delivery is visible in logcat — without
   // it, "the message never arrived" and "the message arrived and the OS drew
   // the tray notification" look identical from the developer's side.
-  debugPrint(
-    'FCM background message: id="${message.messageId}" '
-    'title="${message.notification?.title}" '
-    'body="${message.notification?.body}" data=${message.data}',
-  );
+  // Debug builds only — the payload is user-facing content and must not sit in
+  // a release logcat that any app on the device can read.
+  if (kDebugMode) {
+    debugPrint(
+      'FCM background message: id="${message.messageId}" '
+      'title="${message.notification?.title}" '
+      'body="${message.notification?.body}" data=${message.data}',
+    );
+  }
 
   try {
     await Firebase.initializeApp(
@@ -45,18 +52,53 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Everything runs inside a guarded zone so an async error thrown outside the
+  // widget tree (a repository future, a stream callback) is reported instead of
+  // vanishing into the void. Without this, the app can misbehave in release
+  // with nothing at all in the logs to explain why.
+  await runZonedGuarded<Future<void>>(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      // Framework-level errors (build/layout/paint). In debug, keep Flutter's
+      // red-screen behaviour; in release, log and carry on rather than letting
+      // an isolated widget failure take down the screen.
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        _reportError(details.exception, details.stack);
+      };
 
-  // Register the background message handler (top-level, vm:entry-point) after
-  // Firebase is initialized and before runApp. Non-fatal on failure.
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      // Errors from the platform side (plugins, engine).
+      PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+        _reportError(error, stack);
+        return true;
+      };
 
-  // Resolve the AI key/model once at startup. Tries Firebase Remote Config
-  // first (owner-changeable post-deploy), then the bundled env.json, then
-  // --dart-define. Requires Firebase to be initialized first (above).
-  final AiConfig aiConfig = await AiConfig.load();
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
 
-  runApp(RecipeGeneratorApp(aiConfig: aiConfig));
+      // Register the background message handler (top-level, vm:entry-point)
+      // after Firebase is initialized and before runApp. Non-fatal on failure.
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+      // Resolve the AI key/model once at startup. Tries Firebase Remote Config
+      // first (owner-changeable post-deploy), then the bundled env.json, then
+      // --dart-define. Requires Firebase to be initialized first (above).
+      final AiConfig aiConfig = await AiConfig.load();
+
+      runApp(RecipeGeneratorApp(aiConfig: aiConfig));
+    },
+    _reportError,
+  );
+}
+
+/// Single funnel for uncaught errors.
+///
+/// Today it logs. It is deliberately one function so wiring a crash reporter
+/// (Crashlytics et al.) later is a one-line change here rather than a hunt
+/// through every error site.
+void _reportError(Object error, StackTrace? stack) {
+  debugPrint('UNCAUGHT ERROR: $error');
+  if (stack != null) debugPrint('$stack');
 }

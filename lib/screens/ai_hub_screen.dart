@@ -381,6 +381,18 @@ class _ChatViewState extends State<_ChatView> {
   Future<void> _send([String? preset]) async {
     final String text = (preset ?? _controller.text).trim();
     if (text.isEmpty) return;
+
+    // Guard the outbound Gemini call. The composer caps input length in the UI,
+    // but a paste or a preset can still exceed it, and an unbounded prompt is
+    // billable quota this project does not have.
+    final String? tooLong = Validators.aiPrompt(text);
+    if (tooLong != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tooLong)),
+      );
+      return;
+    }
+
     _controller.clear();
     FocusScope.of(context).unfocus();
     final String? uid = context.read<AuthProvider>().uid;
@@ -492,6 +504,11 @@ class _ChatViewState extends State<_ChatView> {
                   controller: _controller,
                   minLines: 1,
                   maxLines: 4,
+                  // Same ceiling the Generate tab enforces. counterText is
+                  // blanked so the composer keeps its compact look; the limit
+                  // still stops over-long input at the source.
+                  maxLength: Validators.aiPromptMaxLength,
+                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
                   cursorColor: AppColors.primary,

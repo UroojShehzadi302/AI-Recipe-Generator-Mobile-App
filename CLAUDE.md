@@ -49,11 +49,12 @@ lib/
   providers/    auth_provider, recipe_provider, chat_provider, notification_provider  # ChangeNotifiers
   screens/      splash, login, register, forgot_password, main_shell, home,
                 recipe_detail, favorites, saved, profile, edit_profile,
+                change_password, delete_account,
                 search, category_results, ai_hub (Generate|Chat)
 test/           widget_test, recipe_detail_test, auth_provider_google_test,
                 gemini_direct_service_test, ai_hub_screen_test, markdown_text_test,
                 chat_provider_history_test, home_catalog_test, responsive_shimmer_test,
-                notification_provider_test
+                notification_provider_test, validators_password_test
 (root)          env.json (git-ignored key, bundled as asset) + env.example.json,
                 firestore.rules, firestore.indexes.json, firebase.json,
                 .vscode/launch.json (AI-enabled run configs)
@@ -64,6 +65,18 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
 - Colors: `primary #8B5E3C`, `primaryDark #5E3D26`, `primarySoft #EDE3DA`, `secondary #D6A46D`, `background #F6F2EE`, `surface #FFFFFF`, `textPrimary #2E2E2E`, `textSecondary #7A7A7A`, `border #E0E0E0`, `success` soft green, `error` soft red.
 - Radii: sm 12 / md 16 (buttons+fields) / lg 20 / xl 25 (cards). Button height 55. Field padding 18.
 - Text: Poppins — heading 28/bold, title 20/w600, subtitle 14, body 16, button 16/bold, caption 12.
+
+## Security posture (hardened 2026-07-30)
+- **Global error handling** — `main()` runs inside `runZonedGuarded`, with `FlutterError.onError` + `PlatformDispatcher.instance.onError` wired. All uncaught errors funnel through one `_reportError` function in `main.dart`; adding Crashlytics later is a one-line change there. Before this, async errors vanished silently in release.
+- **Release build** — `isMinifyEnabled` + `isShrinkResources` with `android/app/proguard-rules.pro` (keeps Flutter embedding / Firebase / Play Services reflection targets; `-dontwarn com.google.android.play.core.**` is **required** — without it R8 fails on ~11 missing deferred-component classes). Verified: `flutter build apk --release` succeeds.
+- **Release signing** — `android/app/build.gradle.kts` reads `android/key.properties` (git-ignored) and falls back to debug signing when absent, so a fresh clone still builds. ⚠️ **Owner must generate a real keystore before any Play upload** (OWNER_SETUP.md §5) — and add its SHA-1 to Firebase, or Google Sign-In breaks in release.
+- **Sensitive logs** — FCM token and notification payloads are behind `kDebugMode`. `debugPrint` is NOT stripped in release, so unguarded logs would leak to any app reading logcat.
+- **Password policy** — min **8** chars (not Firebase's 6), must contain a letter AND a digit, max 128. Deliberately no symbol/case requirement. Locked by `test/validators_password_test.dart`.
+- **AI input** — `Validators.aiPrompt` caps prompts at 500 chars; the Chat composer now enforces it too (`maxLength` + a guard in `_send`), so one paste can't drain the free Gemini quota.
+- **Account deletion (Google Play requirement)** — `screens/delete_account_screen.dart` → `AuthProvider.deleteAccount` → `AuthRepository.deleteAccount` → `UserRepository.deleteUserData` + `AuthService.deleteAccount`. Requires typing `DELETE` **and** re-authentication (password field, or a fresh Google sign-in). **Order is load-bearing: Firestore data first, auth account last** — deleting the auth user first revokes the credentials the rules need to authorise the data deletion, permanently stranding the documents. `deleteUserData` walks the tree explicitly (favorites, generatedRecipes, each chat's messages, chats, then the profile doc) because Firestore has no client-side recursive delete. Returns `false` on cancellation with nothing deleted.
+- **Change password** — `screens/change_password_screen.dart`; asks for the current password up front rather than reacting to `requires-recent-login`.
+- **Email verification** — `_EmailVerificationBanner` in `profile_screen.dart`: stateful (so ProfileScreen stays stateless), calls `reloadUser()` on mount because `emailVerified` is cached in the ID token and stays stale after the user clicks the link. Hidden for Google accounts and while the first check is in flight.
+- **Still open:** no Crashlytics; Privacy Policy + Terms URLs needed for the Play listing (store-listing fields, not code).
 
 ## Backend decisions (from backend_architecture.md — authoritative)
 - **D1** AI tab = "AI Hub" with two modes (Generate + Chat).
@@ -121,7 +134,7 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
 The code stack is complete (`services/auth_service.dart` `signInWithGoogle` + `kGoogleServerClientId`, `repositories/auth_repository.dart`, `providers/auth_provider.dart`, Login/Register handlers navigate on success) AND the owner has completed the console side: Google enabled, debug SHA-1 added, and the **new `google-services.json` (with `oauth_client` entries) is in `android/app/`**. Should now work on-device — **owner to smoke-test the button and confirm** (ask for the exact on-screen/console text if it errors). Cancellation returns `null` from the repo → provider stays idle, no error snackbar.
 
 ## Next unblocked work
-Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**. `flutter analyze` = 0 (3 accepted hints), `flutter test` = **73 pass**. Remaining:
+Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**, plus the **2026-07-30 security hardening pass** (see Security posture above). `flutter analyze` = 0 (3 accepted hints), `flutter test` = **79 pass**, `flutter build apk --release` succeeds with R8. Remaining:
 
 **Owner-only (blockers, not code):**
 - ✅ ~~Deploy `firestore.rules`~~ **DONE 2026-07-29** — deployed to `ai-recipe-generator-db27c`; the open test-mode rules are gone. Worth a quick on-device pass over favorites / saved / chat history to confirm nothing reads or writes outside `users/{uid}/…`.
@@ -136,4 +149,4 @@ Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5
 
 **Deferred to production:** M3 (Cloud Functions / full backend) per D7. Real content-source decision (Open Decision 1) — Home/Search/Detail run on the TheMealDB + curated-desi blend until then.
 
-**Uncommitted:** the 2026-07-29 notifications work is on `refactor/foundation`, not committed — FCM diagnostic logging (permission status / token / background receipt), tap-opened notifications kept **unread** so the bell badges, inbox **persistence** (`shared_preferences` + `notification_store.dart`, background-isolate append, resume merge), per-row **tap-to-read**, **swipe-to-delete** + **Clear all**, the `dedupeKey` fix for the resume-duplication bug, and 7-day retention for read items.
+**Owner blockers before a Play Store release:** generate a real signing keystore (OWNER_SETUP.md §5) + add its SHA-1 to Firebase; host Privacy Policy + Terms URLs for the store listing. Neither is a code change.
