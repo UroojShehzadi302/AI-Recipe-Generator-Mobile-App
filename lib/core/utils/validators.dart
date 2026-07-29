@@ -62,18 +62,35 @@ class Validators {
   }
 
   /// Minimum number of characters required by [password].
-  static const int passwordMinLength = 6;
+  ///
+  /// Eight, not Firebase's default six: six characters of a single character
+  /// class is trivially guessable, and the account guards a user's saved
+  /// recipes and chat history.
+  static const int passwordMinLength = 8;
+
+  /// Maximum accepted password length. Firebase itself imposes no practical
+  /// cap; this only stops a pathological paste from reaching the network.
+  static const int passwordMaxLength = 128;
+
+  static final RegExp _hasLetter = RegExp(r'[A-Za-z]');
+  static final RegExp _hasDigit = RegExp(r'\d');
 
   /// Validates a password.
   ///
   /// Rules:
   /// * Required (must not be empty after trimming).
-  /// * Must be at least [passwordMinLength] characters long.
+  /// * At least [passwordMinLength] and at most [passwordMaxLength] characters.
+  /// * Must contain at least one letter AND one digit — this is what stops
+  ///   `11111111` and `password` from being accepted.
+  ///
+  /// Deliberately does NOT demand a symbol or mixed case: past a certain point
+  /// composition rules push people toward `Password1!` and a sticky note, which
+  /// is worse than a longer simple passphrase.
   ///
   /// ```dart
   /// Validators.password('secret123'); // null (valid)
   /// Validators.password('');          // 'Password is required'
-  /// Validators.password('123');       // 'Password must be at least 6 characters'
+  /// Validators.password('12345678');  // 'Password must include a letter and a number'
   /// ```
   static String? password(String? v) {
     final value = v?.trim() ?? '';
@@ -82,6 +99,12 @@ class Validators {
     }
     if (value.length < passwordMinLength) {
       return 'Password must be at least $passwordMinLength characters';
+    }
+    if (value.length > passwordMaxLength) {
+      return 'Password must be under $passwordMaxLength characters';
+    }
+    if (!_hasLetter.hasMatch(value) || !_hasDigit.hasMatch(value)) {
+      return 'Password must include a letter and a number';
     }
     return null;
   }

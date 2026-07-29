@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/recipe_model.dart';
 import '../screens/category_results_screen.dart';
+import '../screens/change_password_screen.dart';
+import '../screens/delete_account_screen.dart';
 import '../screens/edit_profile_screen.dart';
 import '../screens/forgot_password_screen.dart';
 import '../screens/login_screen.dart';
@@ -33,6 +35,8 @@ class AppRoutes {
   static const String chat = '/chat';
   static const String profile = '/profile';
   static const String editProfile = '/edit-profile';
+  static const String changePassword = '/change-password';
+  static const String deleteAccount = '/delete-account';
   static const String settings = '/settings';
 
   /// Resolves a [RouteSettings] into a [MaterialPageRoute].
@@ -58,6 +62,10 @@ class AppRoutes {
         return _page(const SearchScreen(), settings);
       case editProfile:
         return _page(const EditProfileScreen(), settings);
+      case changePassword:
+        return _page(const ChangePasswordScreen(), settings);
+      case deleteAccount:
+        return _page(const DeleteAccountScreen(), settings);
       case category:
         final args = settings.arguments;
         if (args is String) {

@@ -1,3 +1,14 @@
+import java.util.Properties
+
+// Release signing credentials live outside version control. Absent on a fresh
+// clone and in CI, which is why every use below is guarded by `.exists()`.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -28,11 +39,42 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release signing, loaded from android/key.properties (git-ignored).
+    //
+    // The debug keystore is shared by every Flutter install on the machine, so
+    // anything signed with it can be replaced by anyone. Play Store upload
+    // requires a real key. Until the owner generates one (see OWNER_SETUP.md),
+    // key.properties is absent and the build falls back to debug signing so
+    // `flutter run --release` keeps working locally.
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                // Local-only fallback. NOT publishable.
+                signingConfigs.getByName("debug")
+            }
+
+            // Shrink + obfuscate. Without this the release APK unzips into
+            // readable class names, which makes pulling the bundled Gemini key
+            // and the Firebase config trivial.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
