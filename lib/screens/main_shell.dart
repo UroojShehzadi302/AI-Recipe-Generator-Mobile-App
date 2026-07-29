@@ -24,12 +24,15 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _index = 0;
 
   @override
   void initState() {
     super.initState();
+    // Observe lifecycle so notifications the FCM background isolate stored
+    // while the app was backgrounded get merged into the inbox on resume.
+    WidgetsBinding.instance.addObserver(this);
     // Warm the favorites list so Home hearts reflect saved state immediately,
     // and initialize push notifications (permission + FCM token + listeners).
     // Both run after the first frame so construction stays Firebase-free.
@@ -41,6 +44,20 @@ class _MainShellState extends State<MainShell> {
       }
       context.read<NotificationProvider>().init();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<NotificationProvider>().refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   void _select(int i) => setState(() => _index = i);

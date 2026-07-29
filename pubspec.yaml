@@ -29,11 +29,30 @@ dependencies:
   image_picker: ^1.2.3
   firebase_remote_config: ^6.5.5
   firebase_messaging: ^16.4.3
+  shared_preferences: ^2.5.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Android launcher icon, generated from the brand logo.
+# Regenerate after changing assets/images/logo.png with:
+#   dart run flutter_launcher_icons
+# The adaptive-icon background is primaryDark (#5E3D26) so the Android 8+
+# circular/squircle mask blends with the logo's own brown field instead of
+# exposing a white corner.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#5E3D26"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  # Android crops the outer ~33% of an adaptive foreground; the inset keeps the
+  # pot and the circuit-tree inside the safe zone instead of clipping them.
+  adaptive_icon_foreground_inset: 18
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
