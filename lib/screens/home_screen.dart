@@ -477,7 +477,8 @@ class _RailEmpty extends StatelessWidget {
 ///
 /// Reads from [NotificationProvider]: shows a branded empty state when there
 /// are none, otherwise a scrollable list (title / body / relative time) with a
-/// "Mark all read" affordance in the header. Marks everything read when opened.
+/// "Mark all read" affordance in the header. Opening the sheet does NOT clear
+/// the badge on its own — the user clears it via "Mark all read".
 class _NotificationInboxSheet extends StatefulWidget {
   const _NotificationInboxSheet();
 
@@ -519,12 +520,37 @@ class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
                   Consumer<NotificationProvider>(
                     builder: (context, notif, _) {
                       if (notif.items.isEmpty) return const SizedBox.shrink();
-                      return TextButton(
-                        onPressed: notif.hasUnread ? notif.markAllRead : null,
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
+                      return PopupMenuButton<String>(
+                        icon: const Icon(
+                          Icons.more_horiz,
+                          color: AppColors.primary,
                         ),
-                        child: const Text('Mark all read'),
+                        onSelected: (String value) {
+                          if (value == 'read') {
+                            notif.markAllRead();
+                          } else {
+                            notif.clear();
+                          }
+                        },
+                        itemBuilder: (context) => <PopupMenuEntry<String>>[
+                          PopupMenuItem<String>(
+                            value: 'read',
+                            enabled: notif.hasUnread,
+                            child: Text(
+                              'Mark all read',
+                              style: AppTextStyles.body,
+                            ),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'clear',
+                            child: Text(
+                              'Clear all',
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.error,
+                              ),
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -544,8 +570,29 @@ class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
                       height: 1,
                       color: AppColors.border,
                     ),
-                    itemBuilder: (context, index) =>
-                        _NotificationTile(item: items[index]),
+                    itemBuilder: (context, index) {
+                      final AppNotification item = items[index];
+                      return Dismissible(
+                        key: ValueKey<String>(item.dedupeKey),
+                        direction: DismissDirection.endToStart,
+                        onDismissed: (_) => notif.remove(item.dedupeKey),
+                        background: Container(
+                          color: AppColors.error,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(
+                            right: AppDimensions.spaceL,
+                          ),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.white,
+                          ),
+                        ),
+                        child: _NotificationTile(
+                          item: item,
+                          onTap: () => notif.markRead(item.dedupeKey),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -558,15 +605,34 @@ class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
 }
 
 /// A single notification row in the inbox.
+///
+/// Tapping the row marks *this* notification read (via [onTap]); the others
+/// stay unread and keep the bell badge alive. Unread rows carry a tinted
+/// background and a trailing dot so they read as unread at a glance.
 class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({required this.item});
+  const _NotificationTile({required this.item, required this.onTap});
 
   final AppNotification item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final String title = item.title.isEmpty ? 'Notification' : item.title;
     return ListTile(
+      onTap: item.read ? null : onTap,
+      tileColor: item.read
+          ? null
+          : AppColors.primarySoft.withValues(alpha: 0.35),
+      trailing: item.read
+          ? null
+          : Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: AppColors.error,
+                shape: BoxShape.circle,
+              ),
+            ),
       leading: CircleAvatar(
         backgroundColor: AppColors.primarySoft,
         child: Icon(

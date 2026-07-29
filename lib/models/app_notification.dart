@@ -48,6 +48,47 @@ class AppNotification {
     );
   }
 
+  /// Stable key used to recognise the same notification twice.
+  ///
+  /// Prefers the FCM [id]. FCM does not *guarantee* a `messageId`, and an
+  /// id-less notification must still de-duplicate — the same message is seen
+  /// twice whenever the background isolate stores it and the user then taps it
+  /// open. Falling back to the content keeps that a single inbox entry.
+  ///
+  /// Tradeoff: two notifications with an identical title AND body AND no
+  /// message id collapse into one. That is far preferable to the alternative,
+  /// where every app resume re-adds another copy of the same notification.
+  String get dedupeKey => id.isNotEmpty ? id : '$title|$body';
+
+  /// Serializes to a plain JSON map for on-device persistence.
+  ///
+  /// [receivedAt] is stored as milliseconds since epoch (UTC-safe and stable
+  /// across locales) rather than a formatted string.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'body': body,
+        'receivedAt': receivedAt.millisecondsSinceEpoch,
+        'read': read,
+      };
+
+  /// Rebuilds an [AppNotification] from [toJson] output.
+  ///
+  /// Defensive: any missing or wrongly-typed field falls back to a sane default
+  /// so a corrupted stored entry degrades instead of throwing.
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    final Object? millis = json['receivedAt'];
+    return AppNotification(
+      id: json['id'] is String ? json['id'] as String : '',
+      title: json['title'] is String ? json['title'] as String : '',
+      body: json['body'] is String ? json['body'] as String : '',
+      receivedAt: millis is int
+          ? DateTime.fromMillisecondsSinceEpoch(millis)
+          : DateTime.now(),
+      read: json['read'] is bool ? json['read'] as bool : false,
+    );
+  }
+
   @override
   String toString() =>
       'AppNotification(id: $id, title: $title, read: $read)';
