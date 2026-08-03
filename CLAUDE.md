@@ -1,7 +1,11 @@
-# AI Recipe Generator — Project Context
+# CookMate AI — Project Context
 
 > Persistent context for this Flutter app. Read this first each session.
-> Last updated: 2026-07-29.
+> Last updated: 2026-08-04.
+
+## Branding (renamed 2026-08-04)
+The app is **CookMate AI** — *"Your Smart AI Cooking Companion"*. It was previously called "AI Recipe Generator"; that name should not appear in user-facing copy. `AppStrings.appName` / `AppStrings.tagline` are the single source, used by the splash, Login/Register, Profile, About dialog, and `MaterialApp.title`. The **Android launcher label** is `CookMate AI` (`AndroidManifest.xml`).
+⚠️ The Dart package (`ai_recipe_generator`), the `applicationId`, and the `namespace` are all deliberately **unchanged** — renaming them would break the owner's `google-services.json` (Firebase + Google Sign-In). Import paths still read `package:ai_recipe_generator/...`; that is expected, not a leftover.
 
 ## What this is
 A production-intent **Flutter (Android-first) AI recipe app**: Firebase backend + Google Gemini. Premium **warm-brown / cream** brand. Users register, browse recipes, generate recipes with AI, chat with an AI cooking assistant, favorite/save recipes, and manage a profile. **Dev phase calls the Gemini Developer API directly** from the app; Cloud Functions is the production target (see D7).
@@ -15,9 +19,12 @@ Design docs live in `documents/`: `prd.pdf`, `trd.pdf`, `afd.pdf`, `ui_ux design
 4. Use `withValues(alpha:)` (never deprecated `withOpacity`), wildcard params `(_, _, _)`, `const` where possible.
 5. **After every change:** `flutter analyze` must stay at 0 errors/warnings (3 known `prefer_initializing_formals` info hints are accepted), and `flutter test` must pass.
 6. State management is **Provider** (mandated by the docs).
+7. **Don't set `physics:` on scrollables.** `AppScrollBehavior` is applied once on `MaterialApp` and gives every scrollable bouncing physics. The only exception is a *nested* scrollable, which still needs `NeverScrollableScrollPhysics`.
+8. **Animations are tokens too** — reuse `FadeSlideIn` / `PressableScale` from `app_animations.dart` and the curves/durations there rather than hand-rolling an `AnimationController` per screen.
+9. **A green `flutter test` does not mean the UI is right.** Several real defects this session (grid crash, nav bar centred, composer too high, colourless heart pop, flickering avatar) passed analyze, tests, *and* a release build. Anything visual needs the owner on a device — say so plainly rather than implying it's verified.
 
 ## Tech stack
-Flutter 3.x / Dart, Material 3, Provider, Firebase (Auth, Firestore; **no Cloud Storage** — avatars are base64 in Firestore to stay on the free plan), **Firebase Cloud Messaging** (`firebase_messaging ^16.4.3`, receive-only push — owner sends free from the console, no Blaze), **`shared_preferences ^2.5.5`** (on-device notifications inbox only), **Google Sign-In** (`google_sign_in ^7.2.0`), **image_picker** (avatar gallery pick), **Google Gemini via the free Developer API called directly over `http`** (dev phase — Cloud Functions is the production target, see D7). Chat markdown uses a small in-house renderer (`markdown_text.dart`, no package) — supports headings/bold/italic/code/lists **plus blockquotes and pipe tables** (defensive: malformed tables degrade to text, never throw). Fonts: **Poppins bundled locally** as assets (`assets/fonts/`, weights 400/500/600/700; family `'Poppins'` referenced by `AppTextStyles` + `ThemeData.fontFamily`). `google_fonts` **removed** — no runtime font fetch. (Editing bundled fonts needs a full stop+run, not hot reload.)
+Flutter 3.x / Dart, Material 3, Provider, Firebase (Auth, Firestore; **no Cloud Storage** — avatars are base64 in Firestore to stay on the free plan), **Firebase Cloud Messaging** (`firebase_messaging ^16.4.3`, receive-only push — owner sends free from the console, no Blaze), **`shared_preferences ^2.5.5`** (on-device notifications inbox only), **Google Sign-In** (`google_sign_in ^7.2.0`), **image_picker** (avatar gallery pick), **Google Gemini via the free Developer API called directly over `http`** (dev phase — Cloud Functions is the production target, see D7). Chat markdown uses a small in-house renderer (`markdown_text.dart`, no package) — supports headings/bold/italic/code/lists **plus blockquotes and pipe tables** (defensive: malformed tables degrade to text, never throw). Fonts: **Fraunces (variable, headings) + Inter (400/500/600/700, body)** bundled locally as assets (`assets/fonts/`), referenced via `AppTextStyles.displayFamily` / `.fontFamily`. `google_fonts` **removed** — no runtime font fetch. (Editing bundled fonts needs a full stop+run, not hot reload.)
 
 ## Architecture / folders
 ```
@@ -27,17 +34,24 @@ lib/
   app/app.dart                   # RecipeGeneratorApp: builds DI graph + MultiProvider + MaterialApp
   routes/app_routes.dart         # onGenerateRoute + route constants (typed args, e.g. Recipe)
   core/
-    theme/    app_colors, app_dimensions, app_text_styles, app_durations, app_shadows, app_theme
+    theme/    app_colors, app_dimensions, app_text_styles, app_durations, app_shadows,
+              app_animations (curves + FadeSlideIn/PressableScale),
+              app_scroll_behavior (app-wide bouncing physics), app_theme
     constants/ app_assets, app_strings, sample_recipes   # sample_recipes = placeholder data (TODO: real feed M5)
     config/   ai_config                # Gemini key+model; AiConfig.load() reads bundled env.json at RUNTIME
     utils/    validators, responsive, image_source   # responsive = size-class helpers; image_source = data:URI/http → ImageProvider
     error/    failure, error_mapper
-    widgets/  primary_button, app_text_field, google_button, or_divider, section_title,
-              loading_indicator, empty_state, app_error_view, profile_avatar,
+    widgets/  primary_button (variants + loading/disabled/press), app_text_field, google_button,
+              or_divider, section_title, loading_indicator, empty_state, app_error_view,
+              profile_avatar (ClipOval + cover; caches its ImageProvider),
               category_chip, recipe_card, ai_assistant_card, markdown_text,
-              shimmer_loading   # in-house shimmer + RecipeCard/Rail/Grid skeletons (no package)
+              app_bottom_nav          # floating frosted nav bar (NavDestination + AppBottomNav)
+              favorite_button         # heart with pop + ring burst; instant red fill
+              recipe_opening_overlay  # branded "opening this recipe" loader
+              shimmer_loading         # in-house shimmer + RecipeCard/Rail/Grid skeletons (no package)
   models/       recipe_model (Recipe/Nutrition/Ingredient), user_model, chat_message, chat_session,
-                app_notification (inbox item; JSON + dedupeKey)
+                app_notification (inbox item; JSON + dedupeKey),
+                generation_entry (Usage History row: recipe + prompt + date + status)
   services/     auth_service, firestore_service,
                 meal_db_service (TheMealDB catalog), ai_service (interface),
                 gemini_direct_service (dev Gemini impl),
@@ -49,22 +63,41 @@ lib/
   providers/    auth_provider, recipe_provider, chat_provider, notification_provider  # ChangeNotifiers
   screens/      splash, login, register, forgot_password, main_shell, home,
                 recipe_detail, favorites, saved, profile, edit_profile,
-                change_password, delete_account,
+                avatar_crop (circular pan/zoom cropper),
+                change_password, delete_account, history (Usage History),
                 search, category_results, ai_hub (Generate|Chat)
 test/           widget_test, recipe_detail_test, auth_provider_google_test,
                 gemini_direct_service_test, ai_hub_screen_test, markdown_text_test,
                 chat_provider_history_test, home_catalog_test, responsive_shimmer_test,
-                notification_provider_test, validators_password_test
+                notification_provider_test, validators_password_test,
+                desi_recipes_test, meal_db_service_test, search_test,
+                category_results_test, generation_entry_test,
+                ui_polish_test   # nav position/labels, buttons, fields, tap + heart
+                                 # animation, hero-tag contract, avatar provider
+                                 # caching, overflow, type scale
 (root)          env.json (git-ignored key, bundled as asset) + env.example.json,
                 firestore.rules, firestore.indexes.json, firebase.json,
                 .vscode/launch.json (AI-enabled run configs)
 ```
 Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily** (getters, not constructors) so providers are constructible in unit tests without Firebase.
 
-## Design tokens (values)
-- Colors: `primary #8B5E3C`, `primaryDark #5E3D26`, `primarySoft #EDE3DA`, `secondary #D6A46D`, `background #F6F2EE`, `surface #FFFFFF`, `textPrimary #2E2E2E`, `textSecondary #7A7A7A`, `border #E0E0E0`, `success` soft green, `error` soft red.
-- Radii: sm 12 / md 16 (buttons+fields) / lg 20 / xl 25 (cards). Button height 55. Field padding 18.
-- Text: Poppins — heading 28/bold, title 20/w600, subtitle 14, body 16, button 16/bold, caption 12.
+## Design tokens (values) — rescaled 2026-08-04
+- **Colors** (`app_colors.dart`): `primary #8B5E3C`, `primaryDark #5E3D26`, `primarySoft #EDE3DA`, `primaryFaint #F7F1EC`, `secondary #D6A46D`, `background #F6F2EE`, `surface #FFFFFF`, `surfaceAlt #F3EEE9`, `scrim`, `textPrimary #2E2E2E`, `textSecondary #7A7A7A`, `textTertiary #A6A6A6`, `textDisabled`, `onPrimary`, `border #E0E0E0`, `borderSoft #EFEAE5`, `disabled`, `success`, `error`, `warning`, `info`. Plus gradients: `brandGradient`, `placeholderGradient`, `imageScrim`.
+- **Typography** (`app_text_styles.dart`) — **two families, split by job** (changed 2026-08-04; Poppins was dropped as too generic):
+  - **Fraunces** (`AppTextStyles.displayFamily`) — a warm old-style serif, cookbook/food-magazine voice. Used ONLY by `display 28/w600` · `screenTitle 22/w600` · `sectionTitle 18/w600`. Weights stop at w600 because old-style serifs get heavy fast.
+  - **Inter** (`AppTextStyles.fontFamily`) — everything meant to be *read*: `cardTitle 16/w600` · `body 14` · `bodyMedium 14/w500` · `subtitle 14` · `caption 12` · `label 11/w500` · `button 14/w600`. It is also the `ThemeData.fontFamily` default.
+  - ⚠️ **Do not set Fraunces below 16px.** The pairing works because the serif carries character at 18px+ and Inter stays legible at 11–14px; a heading font in a chip label undoes the whole thing. Both the family split and the theme default are locked by `test/ui_polish_test.dart`.
+  - Fraunces ships as a **variable font** (one file, `wght` axis) — listed in `pubspec.yaml` with *no* `weight:` keys on purpose; adding per-weight entries for the same file makes Flutter synthesize weights instead of using the real axis. Inter ships as four static TTFs (400/500/600/700).
+  - Both are **SIL OFL 1.1** (free for commercial use); license files ship in `assets/fonts/OFL-Fraunces.txt` and `OFL-Inter.txt`. Still no `google_fonts` dependency — everything is bundled, so type is right offline and at first paint.
+  - Aliases `heading`→screenTitle, `title`→sectionTitle, `subtitle` (14, secondary) exist so the ~200 legacy call sites kept working through the rescale *and* the family swap. **Editing bundled fonts needs a full stop+run, not hot reload.**
+- **Spacing** (4pt grid): `space2 2 · Xs 4 · S 8 · M 12 · L 16 · Xl 20 · Xxl 28 · Huge 40`.
+- **Radii**: `Xs 8 · Sm 12 · Md 16 (buttons+fields) · Lg 20 · Xl 24 (cards/sheets) · Pill 999`. Button height **52**, field padding **16**, icons `Sm 16 / Md 20 / Lg 24`.
+- **Two nav-bar spacing tokens — do not mix them up** (I got this wrong twice by eye; a test now pins `navBarOverlap < navBarClearance`):
+  - **`navBarClearance`** (96 = height + both margins + gap) — bottom **padding** for a **scrollable** inside a tab, so its last item scrolls fully clear of the bar. Home/Favorites/Saved/Profile/AI-Generate use it; forgetting it hides content behind the bar.
+  - **`navBarOverlap`** (76 = height + margin) — for a **bottom-pinned surface that paints to the screen edge**, e.g. the AI Chat composer. It only has to clear the bar itself. Using the larger `navBarClearance` there pushed the input visibly too high; using an outer *margin* instead left the white surface short of the bottom with a visible seam. Correct answer: white extends to the edge, gap goes *inside* as bottom padding.
+- **Shadows** (`app_shadows.dart`): `none · subtle · card · raised · selectedChip · button · glow(color, alpha)`. Low-opacity and tight — soft "lift", not drop-shadow.
+- **Motion**: `app_durations.dart` (`fast 120 · short 200 · medium 300 · long 450 · stagger/staggerCap`) + `app_animations.dart` (curves `enter/exit/standard/emphasized`, `staggerFor(index)`, and the reusable **`FadeSlideIn`** and **`PressableScale`** widgets).
+- **Scrolling**: `app_scroll_behavior.dart` — `AppScrollBehavior` is set once on `MaterialApp.scrollBehavior`, giving **every** scrollable bouncing physics + a stretch overscroll indicator. Do NOT re-specify `physics:` per widget; the exception is nested scrollables, which still need `NeverScrollableScrollPhysics`.
 
 ## Security posture (hardened 2026-07-30)
 - **Global error handling** — `main()` runs inside `runZonedGuarded`, with `FlutterError.onError` + `PlatformDispatcher.instance.onError` wired. All uncaught errors funnel through one `_reportError` function in `main.dart`; adding Crashlytics later is a one-line change there. Before this, async errors vanished silently in release.
@@ -77,6 +110,45 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
 - **Change password** — `screens/change_password_screen.dart`; asks for the current password up front rather than reacting to `requires-recent-login`.
 - **Email verification** — `_EmailVerificationBanner` in `profile_screen.dart`: stateful (so ProfileScreen stays stateless), calls `reloadUser()` on mount because `emailVerified` is cached in the ID token and stays stale after the user clicks the link. Hidden for Google accounts and while the first check is in flight.
 - **Still open:** no Crashlytics; Privacy Policy + Terms URLs needed for the Play listing (store-listing fields, not code).
+
+## UI/UX polish phase (2026-08-04)
+A presentation-only pass — **no architecture, repository, or Firebase/Gemini logic was changed.** What landed:
+- **Rebrand** to CookMate AI (see Branding above).
+- **Typography rescaled down** and centralized; 41 hardcoded `fontSize:` literals removed. The alias tokens (`heading`/`title`/`subtitle`) are what let this happen without touching every screen — keep them.
+- **New floating bottom nav** (`app_bottom_nav.dart`): pill-shaped and inset from the edges, **frosted** (translucent surface over a `BackdropFilter` blur — an opaque slab floating over a scrolling list reads as a rendering bug), with a **single sliding pill** indicator (`AnimatedAlign`) instead of per-tab backgrounds, outline→filled icon swaps, and the gradient-circle AI action. **Only the selected tab shows its label** (it expands downward via `AnimatedSize`) — that is what lets five destinations fit a 320dp phone; an earlier horizontal expansion overflowed by 15px.
+  - ⚠️ **The bar's root must not be a widget that expands vertically.** `Scaffold.bottomNavigationBar` passes *loose* vertical constraints, so a `Center` (the original root, added to cap width on tablets) grew to the full height and floated the bar into the middle of the screen. It is now `Column(mainAxisSize: MainAxisSize.min)` + an `Align` for horizontal centering only. Pinned by the "sits at the bottom of the Scaffold" test. `MainShell` sets **`extendBody: true`** so content scrolls *under* it — which is exactly why `navBarClearance` padding is mandatory on tab scrollables.
+- **Depth pass** — `AppColors.backgroundGradient` (a very subtle top-down warm wash) is applied once in `MainShell` so every tab shares it; the AI hero card gained a 3-stop gradient, translucent depth "orbs", and a lit sparkle badge; recipe cards gained a hairline border and always-on image scrim.
+- **App-wide bouncing scroll** via one `scrollBehavior` on `MaterialApp` (previously 24 of 27 scrollables specified nothing).
+- **Buttons/fields rebuilt**: `PrimaryButton` gained variants (primary/outlined/danger), an icon slot, a real disabled state, and press-scale + ripple; `AppTextField` gained focus-reactive icons, autofill hints, submit callbacks, and self-owned `FocusNode` lifecycle.
+- **Usage History (new feature, M-extra)** — `screens/history_screen.dart` + `models/generation_entry.dart` + `RecipeRepository.getGenerationHistory/deleteSavedRecipe` + `RecipeProvider.loadHistory/deleteHistoryEntry`. Rows group by day (Today/Yesterday/date), show the **prompt** that produced the recipe, relative time, and a Saved/Generated status pill; tap reopens, swipe deletes (with confirm). `saveRecipe` now records `prompt` + `status`, defaulting the prompt to `RecipeProvider.lastPrompt` so existing callers didn't change.
+- **Saved tab upgraded** with search, a 4-way sort sheet, long-press delete (optimistic, reverts on failure), and favoriting from the grid.
+- **Profile rebuilt**: gradient identity header, three live stat tiles (Generated/Saved/Favorites), grouped Activity/Account menus. The pre-existing Delete Account flow was **preserved as-is** — it already met the Play requirement (confirm + re-auth + Firestore-then-auth deletion order).
+- **RecipeCard**: `AspectRatio` image inside a `Flexible` (a fixed-height image overflowed short landscape cells — caught by `ui_polish_test.dart`), opt-in `heroEnabled`/`heroPrefix`, tinted stat chips, hairline `borderSoft` border.
+  - ⚠️ **The image decode size MUST come from `LayoutBuilder` constraints, not the `width` field.** Every grid (Favorites/Saved/Search/Category) passes `width: double.infinity`, and `(infinity * 2).round()` throws *"Unsupported operation: Infinity or NaN toInt"* — which rendered a red error box instead of the card on all four screens. Widget tests do NOT catch this on their own because `Image.network` never loads in a test env; the guard is the explicit grid+imageUrl case in `ui_polish_test.dart`.
+  - ⚠️ **`heroEnabled` defaults to false**, but is now switched ON at every list (Home rails, Favorites, Saved, Search, Category), each paired with a matching `Hero` on `RecipeDetailScreen`. Leave it off anywhere the destination has no hero — a hero with no match costs work and animates to nothing.
+
+## Tap / open animations (2026-08-04)
+- **Card press.** `PressableScale` now scales to **0.94** (was 0.97 — a 3% shrink was invisible) and releases on `easeOutBack` so the surface *pops* rather than merely returning.
+  - ⚠️ **`confirmBeforeTap: true` is what makes it visible on a card.** Firing `onTap` on finger-up meant the route push began on the same frame and the animation never rendered — the user reported "no animation occurred". The flag holds the press, plays the rebound, *then* runs the callback. It is ON for `RecipeCard` and deliberately OFF elsewhere: adding ~240ms to a filter chip just reads as lag.
+- **Opening overlay.** `core/widgets/recipe_opening_overlay.dart` replaces the anonymous spinner used while a partial card is resolved (Home rails, Category). Shows the tapped recipe's own photo in a rotating brand arc plus its title. Same wait, but it reads as progress instead of a stall.
+- **Hero flight.** Card photo flies into the detail header. `RecipeDetailScreen.heroTag` is optional and null for AI-generated recipes (no originating card).
+  - ⚠️ **Both ends must derive the tag from `RecipeCard.heroTagFor(recipe, prefix:)`.** Hand-building the string at a call site and drifting means the flight silently does nothing — no error, just no animation. Every list passes its own prefix (`fav-`, `saved-`, `popular-`, `quick-`, `desi-`, `cat-`, `search-`) because Home can show the same recipe in two rails at once and **duplicate hero tags throw at runtime**. On the fetch path the tag is computed from the *card's* recipe before the network call, since the resolved object could otherwise produce a different tag.
+- **Favorite heart.** `core/widgets/favorite_button.dart` — squash → overshoot → settle, with a red ring expanding and fading behind it. Un-favoriting just fades; celebrating a removal would be odd.
+  - ⚠️ **The fill must lead the animation, not trail it.** The heart commits to filled-red on the same frame as the tap via an internal optimistic flag (cleared in `didUpdateWidget`), and the outline→filled `AnimatedSwitcher` cross-fade is skipped on the way in. Waiting for `isFavorite` to round-trip through the Firestore write made it pop *colourless* and turn red afterwards.
+  - The burst ring is wrapped in a **zero-size `SizedBox`**, not an `OverflowBox` — the latter takes an infinite size in an unbounded parent (a Row/Column) and crashes layout.
+
+## Rebuild isolation (why the avatar glitched)
+Favoriting from Home made the profile picture visibly flicker. Two independent causes, both fixed — worth understanding before touching either file:
+1. **`ProfileAvatar` re-decoded its image on every build.** Avatars are base64 `data:` URIs; `imageProviderFromUrl` runs `base64Decode` and returns a **new** `Uint8List` each call, and `MemoryImage` keys its cache on that list's *identity*. Resolving inside `build()` therefore made every rebuild a cache miss → re-decode → flicker. The provider is now resolved once in `initState` and rebuilt only when the URL changes (plus `gaplessPlayback: true`). Pinned by a test asserting the provider is `identical` across an unrelated rebuild.
+2. **The header was being rebuilt at all.** `HomeScreen.build()` calls `watch<RecipeProvider>()`, so any heart tap rebuilt the entire Home tree. The greeting row and bell are now separate widgets (`_HomeHeader`, `_NotificationBell`) that `select` only what they need, so a favorite can't reach the avatar.
+
+## Avatar cropping (2026-08-04)
+`screens/avatar_crop_screen.dart` — after picking from the gallery, the user positions a **circular window** over the photo (drag to pan, pinch to zoom) and the framed region is exported as a square image.
+
+- **Why it exists:** `pickImage(maxWidth: 400, maxHeight: 400)` only *constrains* dimensions, it doesn't crop — a portrait photo stayed tall and letterboxed with black bars inside the circular avatar. Cropping square on the way in is the actual fix.
+- **No new dependency.** The crop replays the user's own `TransformationController` matrix onto a `ui.PictureRecorder` canvas, so the export can't disagree with the preview. (`image_cropper` was considered and rejected: extra dependency, Android manifest entries, and a non-branded system UI.)
+- ⚠️ **`outputSize` is 384px on purpose.** Avatars are stored base64 **inside the Firestore user document**; base64 inflates bytes ~33%, `AuthRepository` rejects anything over **700 KB**, and Firestore documents cap at 1 MB. 384px is sharp at every size the app renders an avatar (largest circle is 68px diameter). Raising it risks tripping the 700 KB guard. Flutter's `toByteData` offers only PNG/raw — there is no JPEG option without a package, which is the other reason to keep the pixel count modest.
+- `ProfileAvatar` uses `ClipOval` + `BoxFit.cover` (not `CircleAvatar.backgroundImage`) so the circle is **always filled**, including for Google account photos we don't control. Edit Profile's preview reuses `ProfileAvatar` rather than keeping a near-duplicate copy.
 
 ## Backend decisions (from backend_architecture.md — authoritative)
 - **D1** AI tab = "AI Hub" with two modes (Generate + Chat).
@@ -134,7 +206,17 @@ Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily
 The code stack is complete (`services/auth_service.dart` `signInWithGoogle` + `kGoogleServerClientId`, `repositories/auth_repository.dart`, `providers/auth_provider.dart`, Login/Register handlers navigate on success) AND the owner has completed the console side: Google enabled, debug SHA-1 added, and the **new `google-services.json` (with `oauth_client` entries) is in `android/app/`**. Should now work on-device — **owner to smoke-test the button and confirm** (ask for the exact on-screen/console text if it errors). Cancellation returns `null` from the repo → provider stays idle, no error snackbar.
 
 ## Next unblocked work
-Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**, plus the **2026-07-30 security hardening pass** (see Security posture above). `flutter analyze` = 0 (3 accepted hints), `flutter test` = **79 pass**, `flutter build apk --release` succeeds with R8. Remaining:
+Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**, plus the **2026-07-30 security hardening pass** (see Security posture above) and the **2026-08-04 UI/UX polish + CookMate AI rebrand** (see the polish / animation / avatar-crop sections above). `flutter analyze` = 0 (3 accepted hints), `flutter test` = **122 pass**, `flutter build apk --release` succeeds with R8 (56.1 MB).
+
+**Owner should device-verify the polish pass** (none of this is testable from the assistant's side — several of these were reported by the user *after* tests + release build passed, which is exactly why they need eyes on a device):
+- The floating nav bar on a small phone (320–360dp wide) and in landscape; that it sits at the **bottom**, and that no tab's last list item hides behind it.
+- **Favorites and Saved grids** — these rendered a red error box before the `cacheWidth` infinity fix; confirm cards paint.
+- Tap a Home rail card: press-and-pop → branded opening overlay → photo flies into the detail header.
+- Tap hearts repeatedly on Home: the heart should be **red for the whole pop**, and the profile picture in the header must **not** flicker.
+- Usage History: generate a recipe → save → Profile → Usage History → tap to reopen, swipe to delete.
+- Edit Profile → pick a **tall/portrait** photo → the crop screen should let you position the circle, and the saved avatar should fill it with no black bars.
+
+Remaining:
 
 **Owner-only (blockers, not code):**
 - ✅ ~~Deploy `firestore.rules`~~ **DONE 2026-07-29** — deployed to `ai-recipe-generator-db27c`; the open test-mode rules are gone. Worth a quick on-device pass over favorites / saved / chat history to confirm nothing reads or writes outside `users/{uid}/…`.
@@ -143,7 +225,7 @@ Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5
 - ✅ ~~Smoke-test push notifications~~ **DONE (2026-07-29, Infinix X663):** permission granted, token resolved, console "Send test message" delivered to the tray, tap-to-open lands in the in-app inbox, badge counts correctly, and the inbox persists across restarts.
 
 **Code-only, unblocked (lower priority / polish):**
-- ✅ Poppins fonts bundled locally (google_fonts removed); ✅ markdown blockquotes + tables; ✅ all 10 desi images now exact Wikimedia matches (incl. Chana Daal / Chana Chaat).
+- ✅ Fonts bundled locally, google_fonts removed (now **Fraunces + Inter**; Poppins was dropped 2026-08-04); ✅ markdown blockquotes + tables; ✅ all 10 desi images now exact Wikimedia matches (incl. Chana Daal / Chana Chaat).
 - ⚠️ Do NOT change the package name off `com.example.ai_recipe_generator` — the owner's `google-services.json` is registered to it; renaming would break Firebase + Google Sign-In. Defer to a deliberate prod rename (new Firebase app + SHA-1 + re-download).
 - Optional: tighten rules toward §8 when App Check + Functions land.
 
