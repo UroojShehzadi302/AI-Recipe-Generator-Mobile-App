@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,7 +14,6 @@ import '../models/usage_entry.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart' show LoadStatus;
 import '../providers/usage_provider.dart';
-import '../repositories/usage_repository.dart';
 
 /// Credit Usage — how many AI tokens this user has consumed.
 ///
@@ -143,23 +141,6 @@ class _UsageScreenState extends State<UsageScreen> {
     }
 
     if (provider.entries.isEmpty) {
-      // In debug, show the write-path breadcrumbs underneath the empty state.
-      // The recording path swallows its errors by design, so without this an
-      // outright failure and "nothing generated yet" look identical.
-      if (kDebugMode) {
-        return ListView(
-          padding: EdgeInsets.all(context.pagePadding),
-          children: [
-            const EmptyState(
-              icon: Icons.data_usage_rounded,
-              title: AppStrings.usageEmpty,
-              message: AppStrings.usageEmptyBody,
-            ),
-            const SizedBox(height: AppDimensions.spaceL),
-            const _TracePanel(),
-          ],
-        );
-      }
       return const EmptyState(
         icon: Icons.data_usage_rounded,
         title: AppStrings.usageEmpty,
@@ -226,74 +207,6 @@ class _UsageScreenState extends State<UsageScreen> {
               color: AppColors.textTertiary,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Debug-only panel showing what the usage write path actually did.
-///
-/// Exists because [UsageRepository.record] is fire-and-forget and swallows all
-/// errors by design — without these breadcrumbs, a permission-denied write and
-/// an empty log are indistinguishable on the device.
-///
-/// Temporary: delete alongside [UsageRepository.trace].
-class _TracePanel extends StatelessWidget {
-  const _TracePanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final List<String> trace = UsageRepository.trace;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppDimensions.spaceM),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceAlt,
-        borderRadius: AppDimensions.brLg,
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.bug_report_outlined,
-                size: AppDimensions.iconSm,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(width: AppDimensions.spaceS),
-              Text(
-                'Debug: usage trace',
-                style: AppTextStyles.label.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimensions.spaceS),
-          if (trace.isEmpty)
-            Text(
-              'No AI call has been recorded since the app started.\n'
-              'Send a chat message, then come back to this screen.',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.textTertiary,
-              ),
-            )
-          else
-            for (final String line in trace)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppDimensions.spaceXs),
-                child: SelectableText(
-                  '• $line',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ),
         ],
       ),
     );

@@ -310,10 +310,7 @@ class GeminiDirectService implements AiService {
     }
 
     if (kDebugMode) {
-      usageTrace?.call(
-        'gemini ${kind.name}: usageMetadata=$usageMetadata -> '
-        'in=$prompt out=$output',
-      );
+      debugPrint('[usage] gemini ${kind.name}: in=$prompt out=$output');
     }
 
     try {

@@ -23,7 +23,6 @@ import '../services/gemini_direct_service.dart';
 import '../services/meal_db_service.dart';
 import '../services/notification_service.dart';
 import '../services/unconfigured_ai_service.dart';
-import '../services/usage_sink.dart';
 
 /// Root widget: builds the dependency graph, provides the state layer, and
 /// hosts the [MaterialApp].
@@ -52,11 +51,6 @@ class RecipeGeneratorApp extends StatelessWidget {
       firestoreService,
       currentUid: () => authService.currentUser?.uid,
     );
-
-    // Debug-only: let the AI service append to the same breadcrumb trail the
-    // Credit Usage screen shows, so a silent write failure is visible on the
-    // device. Temporary — remove with UsageRepository.trace.
-    usageTrace = UsageRepository.note;
 
     // AI: use the direct Gemini Developer API when a key is configured;
     // otherwise a no-op service so AI features degrade to a friendly "coming
