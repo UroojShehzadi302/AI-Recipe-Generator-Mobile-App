@@ -40,32 +40,15 @@ class UsageRepository implements UsageSink {
   /// The private usage subcollection for [uid].
   static String _usagePath(String uid) => 'users/$uid/usage';
 
-  // ---------------------------------------------------------------------------
-  // Diagnostics.
-  //
-  // The write path is fire-and-forget and swallows every error by design, which
-  // makes a failure indistinguishable from "the feature does nothing". These
-  // breadcrumbs record what actually happened on the last few calls so the
-  // Credit Usage screen can show it instead of failing silently.
-  //
-  // Debug-only and capped; remove once the write path is confirmed working.
-  // ---------------------------------------------------------------------------
-
-  /// The most recent write-path events, oldest first (capped at [_maxTrace]).
-  static final List<String> trace = <String>[];
-
-  static const int _maxTrace = 12;
-
-  /// Appends [message] to [trace] from outside this class (used by the AI
-  /// service via the `usageTrace` hook).
-  static void note(String message) => _note(message);
-
-  /// Appends [message] to [trace], also mirroring it to the debug console.
+  /// Logs a write-path event in debug builds.
+  ///
+  /// The write path is fire-and-forget and swallows every error by design,
+  /// which makes a real failure indistinguishable from "nothing to record".
+  /// These lines are the only way to tell the two apart while developing;
+  /// `debugPrint` is not stripped in release, hence the [kDebugMode] guard.
   static void _note(String message) {
     if (!kDebugMode) return;
     debugPrint('[usage] $message');
-    trace.add(message);
-    if (trace.length > _maxTrace) trace.removeAt(0);
   }
 
   /// Resolves the uid to attribute a recording to, or `null` when signed out.

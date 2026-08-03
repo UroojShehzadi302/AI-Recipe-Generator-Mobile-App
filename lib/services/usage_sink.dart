@@ -34,13 +34,6 @@ abstract interface class UsageSink {
   });
 }
 
-/// Debug-only breadcrumb hook, set by the app so the AI service can report what
-/// Gemini actually returned without depending on the repository layer.
-///
-/// Temporary: remove alongside [UsageRepository.trace] once the write path is
-/// confirmed working on a device.
-void Function(String message)? usageTrace;
-
 /// A [UsageSink] that drops every report.
 ///
 /// Used when no user is signed in (there is nowhere to attribute the usage) and
