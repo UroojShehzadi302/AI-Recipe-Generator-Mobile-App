@@ -199,7 +199,6 @@ class _ModeToggle extends StatelessWidget {
               Text(
                 label,
                 style: AppTextStyles.body.copyWith(
-                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color:
                       selected ? AppColors.primary : AppColors.textSecondary,
@@ -279,7 +278,8 @@ class _GenerateViewState extends State<_GenerateView> {
         AppDimensions.spaceL,
         AppDimensions.spaceS,
         AppDimensions.spaceL,
-        AppDimensions.spaceXl,
+        // Clears the floating nav bar.
+        AppDimensions.navBarClearance,
       ),
       child: Form(
         key: _formKey,
@@ -488,54 +488,68 @@ class _ChatViewState extends State<_ChatView> {
 
   Widget _buildComposer(bool isSending) {
     return Container(
+      // The shell sets `extendBody: true`, so the white surface runs all the
+      // way to the bottom of the screen and the floating nav bar sits ON it.
+      // An outer margin here instead would stop the white short of the bottom
+      // and leave a visible seam with a bare strip of background below it.
+      //
+      // The gap therefore goes UNDER the input row as bottom padding, using
+      // navBarOverlap (bar height + margin) rather than the larger
+      // navBarClearance — the latter is sized for scrollables that must clear
+      // the bar completely, and here it pushed the field visibly too high.
       decoration: const BoxDecoration(
         color: AppColors.surface,
         boxShadow: AppShadows.card,
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(AppDimensions.spaceM),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  minLines: 1,
-                  maxLines: 4,
-                  // Same ceiling the Generate tab enforces. counterText is
-                  // blanked so the composer keeps its compact look; the limit
-                  // still stops over-long input at the source.
-                  maxLength: Validators.aiPromptMaxLength,
-                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _send(),
-                  cursorColor: AppColors.primary,
-                  style: AppTextStyles.body,
-                  decoration: InputDecoration(
-                    hintText: 'Ask anything about cooking…',
-                    hintStyle: AppTextStyles.subtitle,
-                    filled: true,
-                    fillColor: AppColors.background,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppDimensions.spaceL,
-                      vertical: AppDimensions.spaceM,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-                      borderSide: BorderSide.none,
-                    ),
+      // No SafeArea: the nav bar consumes the bottom system inset inside its
+      // own SafeArea, and navBarClearance already covers its height + margins.
+      // Adding one here would count the gesture inset twice.
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.spaceM,
+          AppDimensions.spaceM,
+          AppDimensions.spaceM,
+          AppDimensions.navBarOverlap,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                minLines: 1,
+                maxLines: 4,
+                // Same ceiling the Generate tab enforces. counterText is
+                // blanked so the composer keeps its compact look; the limit
+                // still stops over-long input at the source.
+                maxLength: Validators.aiPromptMaxLength,
+                buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
+                cursorColor: AppColors.primary,
+                style: AppTextStyles.body,
+                decoration: InputDecoration(
+                  hintText: 'Ask anything about cooking…',
+                  hintStyle: AppTextStyles.subtitle,
+                  filled: true,
+                  fillColor: AppColors.background,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.spaceL,
+                    vertical: AppDimensions.spaceM,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
-              const SizedBox(width: AppDimensions.spaceS),
-              _SendButton(
-                onPressed: isSending ? null : _send,
-                isSending: isSending,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: AppDimensions.spaceS),
+            _SendButton(
+              onPressed: isSending ? null : _send,
+              isSending: isSending,
+            ),
+          ],
         ),
       ),
     );

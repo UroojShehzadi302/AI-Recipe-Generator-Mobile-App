@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/constants/sample_recipes.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
+import '../core/theme/app_text_styles.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/app_error_view.dart';
 import '../core/widgets/category_chip.dart';
@@ -15,7 +16,7 @@ import '../core/widgets/shimmer_loading.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
-import '../routes/app_routes.dart';
+import 'recipe_detail_screen.dart';
 
 /// Search & Categories screen (M10).
 ///
@@ -120,11 +121,19 @@ class _SearchScreenState extends State<SearchScreen> {
     await context.read<RecipeProvider>().toggleFavorite(uid, recipe);
   }
 
+  /// Namespaces this screen's hero tags so they can't collide with another
+  /// list showing the same recipe.
+  static const String _heroPrefix = 'search-';
+
   void _openRecipe(Recipe recipe) {
-    Navigator.pushNamed(
+    Navigator.push(
       context,
-      AppRoutes.recipeDetail,
-      arguments: recipe,
+      MaterialPageRoute<void>(
+        builder: (_) => RecipeDetailScreen(
+          recipe: recipe,
+          heroTag: RecipeCard.heroTagFor(recipe, prefix: _heroPrefix),
+        ),
+      ),
     );
   }
 
@@ -136,7 +145,12 @@ class _SearchScreenState extends State<SearchScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppDimensions.spaceXl,
+            AppDimensions.spaceS,
+            AppDimensions.spaceXl,
+            0,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -215,14 +229,11 @@ class _SearchScreenState extends State<SearchScreen> {
         textInputAction: TextInputAction.search,
         onChanged: _onQueryChanged,
         onSubmitted: _onSubmitted,
-        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+        style: AppTextStyles.body,
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Search recipes or ingredients',
-          hintStyle: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-          ),
+          hintStyle: AppTextStyles.subtitle,
           prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
           suffixIcon: hasText
               ? IconButton(
@@ -256,7 +267,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _suggestions(RecipeProvider provider) {
     final List<String> recent = provider.recentSearches;
     return ListView(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: AppDimensions.spaceXxl),
       children: [
         if (recent.isNotEmpty) ...[
           _sectionLabel('Recent searches'),
@@ -274,11 +285,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _sectionLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
-      ),
+      style: AppTextStyles.cardTitle,
     );
   }
 
@@ -300,11 +307,8 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               child: Text(
                 term,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
+                style: AppTextStyles.caption
+                    .copyWith(fontWeight: FontWeight.w500),
               ),
             ),
           ),
@@ -315,7 +319,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _resultsGrid(RecipeProvider provider) {
     final List<Recipe> results = provider.searchResults;
     return GridView.builder(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: AppDimensions.spaceXxl),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: context.recipeGridColumns,
         crossAxisSpacing: 14,
@@ -326,6 +330,8 @@ class _SearchScreenState extends State<SearchScreen> {
       itemBuilder: (context, i) => RecipeCard(
         recipe: results[i],
         width: double.infinity,
+        heroPrefix: _heroPrefix,
+        heroEnabled: true,
         isFavorite: provider.isFavorite(results[i]),
         onFavorite: () => _toggleFavorite(results[i]),
         onTap: () => _openRecipe(results[i]),

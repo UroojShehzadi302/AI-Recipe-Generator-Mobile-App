@@ -4,13 +4,14 @@ import 'package:provider/provider.dart';
 import '../core/constants/sample_recipes.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
+import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/ai_assistant_card.dart';
 import '../core/widgets/category_chip.dart';
-import '../core/widgets/loading_indicator.dart';
 import '../core/widgets/profile_avatar.dart';
 import '../core/widgets/recipe_card.dart';
+import '../core/widgets/recipe_opening_overlay.dart';
 import '../core/widgets/section_title.dart';
 import '../core/widgets/shimmer_loading.dart';
 import '../models/app_notification.dart';
@@ -19,6 +20,7 @@ import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
 import '../routes/app_routes.dart';
+import 'recipe_detail_screen.dart';
 
 /// Home tab — the visual centerpiece.
 ///
@@ -41,10 +43,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategory = 0;
 
-  /// The `recipeId` currently being resolved to full detail, or `null` when
-  /// idle. Drives the blocking overlay spinner and prevents double-taps (rail
+  /// The recipe currently being resolved to full detail, or `null` when idle.
+  ///
+  /// Drives the blocking [RecipeOpeningOverlay] and prevents double-taps (rail
   /// cards can be partial and need a lookup before the detail screen opens).
-  String? _openingId;
+  /// The whole [Recipe] is held, not just its id, so the overlay can show the
+  /// card's own photo and title while the fetch is in flight.
+  Recipe? _opening;
 
   @override
   void initState() {
@@ -75,26 +80,40 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Curated (desi) and full cards resolve instantly; live TheMealDB category
   /// cards carry only id/title/image, so we show a blocking overlay while the
   /// full recipe is fetched, then push the detail screen (or warn on failure).
-  Future<void> _openRecipe(Recipe recipe) async {
-    if (_openingId != null) return;
+  Future<void> _openRecipe(Recipe recipe, String railKey) async {
+    if (_opening != null) return;
+
+    // The tag is built from the CARD's recipe and its rail, so the flight still
+    // matches after the fetch swaps in the fuller object below.
+    final String heroTag =
+        RecipeCard.heroTagFor(recipe, prefix: '$railKey-');
 
     final String? id = recipe.recipeId;
     if (id == null || id.isEmpty) {
-      Navigator.pushNamed(context, AppRoutes.recipeDetail, arguments: recipe);
+      _push(recipe, heroTag);
       return;
     }
 
-    setState(() => _openingId = id);
+    setState(() => _opening = recipe);
     final Recipe? full =
         await context.read<RecipeProvider>().getRecipeDetails(id);
     if (!mounted) return;
-    setState(() => _openingId = null);
+    setState(() => _opening = null);
 
     if (full != null) {
-      Navigator.pushNamed(context, AppRoutes.recipeDetail, arguments: full);
+      _push(full, heroTag);
     } else {
       _comingSoon("Couldn't load this recipe. Check your connection.");
     }
+  }
+
+  void _push(Recipe recipe, String heroTag) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => RecipeDetailScreen(recipe: recipe, heroTag: heroTag),
+      ),
+    );
   }
 
   @override
@@ -114,49 +133,60 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: () =>
                 context.read<RecipeProvider>().retryHomeCatalog(),
             child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              // No `physics:` — AppScrollBehavior already supplies bouncing
+              // physics with an AlwaysScrollableScrollPhysics parent, which is
+              // what keeps a short list draggable for pull-to-refresh. Setting
+              // it here overrode the bounce and gave Home Android's hard stop.
               padding: EdgeInsets.fromLTRB(
                 context.pagePadding,
-                12,
+                AppDimensions.spaceM,
                 context.pagePadding,
-                24,
+                // Clears the floating nav bar so the last rail isn't hidden.
+                AppDimensions.navBarClearance,
               ),
               children: [
                 _header(greetingName),
-                const SizedBox(height: 20),
+                const SizedBox(height: AppDimensions.spaceXl),
                 _searchBar(),
-                const SizedBox(height: 18),
+                const SizedBox(height: AppDimensions.spaceL),
                 _categoryChips(),
-                const SizedBox(height: 22),
+                const SizedBox(height: AppDimensions.spaceXl),
                 AiAssistantCard(
                   onTap: widget.onOpenAi ??
                       () => _comingSoon('AI generator coming soon'),
                 ),
-                const SizedBox(height: 26),
+                const SizedBox(height: AppDimensions.spaceXxl),
                 SectionTitle(
                   title: 'Popular Recipes',
+                  subtitle: 'Trending with home cooks',
                   onSeeAll: () => _openCategory(_popularCategory),
                 ),
-                const SizedBox(height: 12),
-                _liveRail(recipeProvider, recipeProvider.popularRail),
-                const SizedBox(height: 26),
+                const SizedBox(height: AppDimensions.spaceM),
+                _liveRail(
+                  recipeProvider,
+                  recipeProvider.popularRail,
+                  'popular',
+                ),
+                const SizedBox(height: AppDimensions.spaceXxl),
                 SectionTitle(
                   title: 'Pakistani Favourites',
+                  subtitle: 'Desi classics, done right',
                   onSeeAll: () => _openCategory('Pakistani'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppDimensions.spaceM),
                 _desiRail(recipeProvider),
-                const SizedBox(height: 26),
+                const SizedBox(height: AppDimensions.spaceXxl),
                 SectionTitle(
                   title: 'Quick & Easy',
+                  subtitle: 'Ready in no time',
                   onSeeAll: () => _openCategory(_quickCategory),
                 ),
-                const SizedBox(height: 12),
-                _liveRail(recipeProvider, recipeProvider.quickRail),
+                const SizedBox(height: AppDimensions.spaceM),
+                _liveRail(recipeProvider, recipeProvider.quickRail, 'quick'),
               ],
             ),
           ),
-          if (_openingId != null) _openingOverlay(),
+          if (_opening != null) RecipeOpeningOverlay(recipe: _opening!),
         ],
       ),
     );
@@ -172,111 +202,10 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pushNamed(context, AppRoutes.category, arguments: category);
   }
 
-  Widget _header(String greetingName) {
-    // Watch the user's photo + name so the avatar updates live after an
-    // Edit Profile change (the avatar is a base64 data: URI — ProfileAvatar
-    // renders it via imageProviderFromUrl).
-    final photoUrl = context.select<AuthProvider, String?>(
-      (p) => p.user?.photoUrl,
-    );
-    final fullName = context.select<AuthProvider, String>(
-      (p) => (p.user?.name ?? '').trim(),
-    );
-    return Row(
-      children: [
-        ProfileAvatar(
-          radius: 24,
-          imageUrl: photoUrl,
-          fallbackInitial: fullName.isNotEmpty ? fullName[0] : null,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hi $greetingName 👋',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'What would you like to cook today?',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ),
-        _notificationBell(),
-      ],
-    );
-  }
-
-  /// The notification bell with a live unread badge. Tapping it opens the
-  /// in-app notifications inbox.
-  Widget _notificationBell() {
-    final int unread = context.select<NotificationProvider, int>(
-      (p) => p.unreadCount,
-    );
-    return _circleIcon(
-      unread > 0 ? Icons.notifications_active : Icons.notifications_none,
-      _openNotifications,
-      badgeCount: unread,
-    );
-  }
-
-  Widget _circleIcon(IconData icon, VoidCallback onTap, {int badgeCount = 0}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 44,
-        height: 44,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: AppColors.primary, size: 22),
-            ),
-            if (badgeCount > 0)
-              Positioned(
-                top: -2,
-                right: -2,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                  decoration: BoxDecoration(
-                    color: AppColors.error,
-                    shape: BoxShape.rectangle,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: AppColors.background, width: 1.5),
-                  ),
-                  child: Center(
-                    child: Text(
-                      badgeCount > 9 ? '9+' : '$badgeCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _header(String greetingName) => _HomeHeader(
+        greetingName: greetingName,
+        onOpenNotifications: _openNotifications,
+      );
 
   void _openNotifications() {
     showModalBottomSheet<void>(
@@ -296,19 +225,29 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, AppRoutes.search),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceL,
+          vertical: AppDimensions.spaceM + 2,
+        ),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          borderRadius: AppDimensions.brPill,
           border: Border.all(color: AppColors.border),
+          boxShadow: AppShadows.subtle,
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Icon(Icons.search, color: AppColors.textSecondary),
-            SizedBox(width: 10),
+            const Icon(
+              Icons.search_rounded,
+              color: AppColors.textSecondary,
+              size: AppDimensions.iconMd,
+            ),
+            const SizedBox(width: AppDimensions.spaceM),
             Text(
               'Search recipes or ingredients',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textTertiary,
+              ),
             ),
           ],
         ),
@@ -330,8 +269,9 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 40,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
         itemCount: SampleRecipes.categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: AppDimensions.spaceS),
         itemBuilder: (context, i) => CategoryChip(
           label: SampleRecipes.categories[i],
           selected: i == _selectedCategory,
@@ -343,7 +283,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// A live (network-backed) rail: shows a loading strip while the catalog
   /// loads, an inline retry on failure, and the recipe cards once loaded.
-  Widget _liveRail(RecipeProvider provider, List<Recipe> recipes) {
+  ///
+  /// [railKey] namespaces each rail's [Hero] tags — the same recipe can appear
+  /// in more than one rail, and duplicate hero tags on screen throw.
+  Widget _liveRail(
+    RecipeProvider provider,
+    List<Recipe> recipes,
+    String railKey,
+  ) {
     switch (provider.homeCatalogStatus) {
       case LoadStatus.idle:
       case LoadStatus.loading:
@@ -355,7 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       case LoadStatus.loaded:
         if (recipes.isEmpty) return const _RailEmpty();
-        return _recipeRail(recipes);
+        return _recipeRail(recipes, railKey);
     }
   }
 
@@ -369,7 +316,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// is populated — even if the network rails failed. Falls back to the loading
   /// strip only while the very first load is still in flight.
   Widget _desiRail(RecipeProvider provider) {
-    if (provider.desiRail.isNotEmpty) return _recipeRail(provider.desiRail);
+    if (provider.desiRail.isNotEmpty) {
+      return _recipeRail(provider.desiRail, 'desi');
+    }
     if (provider.homeCatalogStatus == LoadStatus.loading ||
         provider.homeCatalogStatus == LoadStatus.idle) {
       return _railSkeleton();
@@ -377,38 +326,161 @@ class _HomeScreenState extends State<HomeScreen> {
     return const _RailEmpty();
   }
 
-  Widget _recipeRail(List<Recipe> recipes) {
+  Widget _recipeRail(List<Recipe> recipes, String railKey) {
     final recipeProvider = context.watch<RecipeProvider>();
     return SizedBox(
       height: context.railHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        // Trims the rail's own padding so cards align with the page gutter.
+        padding: EdgeInsets.zero,
         itemCount: recipes.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 14),
+        separatorBuilder: (_, _) => const SizedBox(width: AppDimensions.spaceM),
         itemBuilder: (context, i) => RecipeCard(
           recipe: recipes[i],
           width: context.railCardWidth,
+          heroPrefix: '$railKey-',
+          heroEnabled: true,
           isFavorite: recipeProvider.isFavorite(recipes[i]),
-          onTap: () => _openRecipe(recipes[i]),
+          onTap: () => _openRecipe(recipes[i], railKey),
           onFavorite: () => _toggleFavorite(recipes[i]),
         ),
       ),
     );
   }
 
-  /// A subtle translucent scrim + centered spinner shown while a tapped card is
-  /// resolved to full detail. Absorbs input so the rails can't be tapped again
-  /// mid-resolve.
-  Widget _openingOverlay() {
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          ModalBarrier(
-            color: AppColors.textPrimary.withValues(alpha: 0.25),
-            dismissible: false,
+}
+
+/// The Home greeting row: avatar, greeting, and the notification bell.
+///
+/// A separate widget on purpose. [HomeScreen.build] calls
+/// `watch<RecipeProvider>()`, so favoriting a recipe rebuilds its whole tree —
+/// and rebuilding the avatar there made the profile picture visibly glitch.
+/// Isolated here, the header only rebuilds when the *user* or the unread count
+/// actually changes.
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader({
+    required this.greetingName,
+    required this.onOpenNotifications,
+  });
+
+  final String greetingName;
+  final VoidCallback onOpenNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch the user's photo + name so the avatar updates live after an Edit
+    // Profile change (the avatar is a base64 data: URI — ProfileAvatar renders
+    // it via imageProviderFromUrl).
+    final String? photoUrl = context.select<AuthProvider, String?>(
+      (p) => p.user?.photoUrl,
+    );
+    final String fullName = context.select<AuthProvider, String>(
+      (p) => (p.user?.name ?? '').trim(),
+    );
+
+    return Row(
+      children: [
+        ProfileAvatar(
+          radius: 24,
+          imageUrl: photoUrl,
+          fallbackInitial: fullName.isNotEmpty ? fullName[0] : null,
+        ),
+        const SizedBox(width: AppDimensions.spaceM),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hi $greetingName 👋',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.sectionTitle,
+              ),
+              const SizedBox(height: AppDimensions.space2),
+              const Text(
+                'What would you like to cook today?',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption,
+              ),
+            ],
           ),
-          const LoadingIndicator(),
-        ],
+        ),
+        _NotificationBell(onTap: onOpenNotifications),
+      ],
+    );
+  }
+}
+
+/// The notification bell with a live unread badge.
+///
+/// Separate again so a changing unread count repaints only the bell, not the
+/// avatar beside it.
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final int badgeCount = context.select<NotificationProvider, int>(
+      (p) => p.unreadCount,
+    );
+    final IconData icon = badgeCount > 0
+        ? Icons.notifications_active
+        : Icons.notifications_none;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+                boxShadow: AppShadows.subtle,
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 21),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.spaceXs + 1,
+                  ),
+                  constraints:
+                      const BoxConstraints(minWidth: 18, minHeight: 18),
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    borderRadius: AppDimensions.brPill,
+                    border: Border.all(
+                      color: AppColors.background,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      badgeCount > 9 ? '9+' : '$badgeCount',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.onPrimary,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -436,10 +508,7 @@ class _RailError extends StatelessWidget {
               child: Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
+                style: AppTextStyles.caption,
               ),
             ),
             const SizedBox(height: 8),
@@ -466,7 +535,7 @@ class _RailEmpty extends StatelessWidget {
       child: Center(
         child: Text(
           'Nothing here yet',
-          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          style: AppTextStyles.caption,
         ),
       ),
     );
