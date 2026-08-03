@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/constants/app_strings.dart';
+import '../core/theme/app_animations.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
@@ -10,15 +12,19 @@ import '../core/widgets/primary_button.dart';
 import '../core/widgets/profile_avatar.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
+import '../providers/usage_provider.dart';
 import '../routes/app_routes.dart';
 
-/// Profile tab — user info and account actions.
+/// Profile tab — identity, activity stats, and account actions.
 ///
-/// Shows the signed-in user's identity, sign-in method, and Favorites/Saved
-/// counts, a menu of account actions, and a Log Out action (with a confirm
-/// dialog). Menu rows that map to existing tabs switch to them via
-/// [onNavigateTab]; the rest are honestly marked as arriving in M11.
-class ProfileScreen extends StatelessWidget {
+/// Layout: a brand-gradient identity header, a row of live activity stats
+/// (Generated / Saved / Favorites), then a grouped settings menu and Log Out.
+///
+/// Counts come from the actually-loaded provider lists rather than the
+/// server-maintained `UserModel` counters, which stay 0 until Cloud Functions
+/// land. Menu rows that map to existing tabs switch to them via
+/// [onNavigateTab]; the rest push real routes.
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.onNavigateTab});
 
   /// Switches the [MainShell] tab (0 Home · 1 Favorites · 2 AI · 3 Saved ·
@@ -26,15 +32,38 @@ class ProfileScreen extends StatelessWidget {
   final ValueChanged<int>? onNavigateTab;
 
   /// The app version shown in the footer + About dialog (matches `pubspec`).
-  static const String _appVersion = '1.0.0';
+  static const String appVersion = '1.0.0';
 
-  Future<void> _logout(BuildContext context) async {
-    final bool confirmed = await _confirmLogout(context) ?? false;
-    if (!confirmed || !context.mounted) return;
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
 
-    final auth = context.read<AuthProvider>();
+class _ProfileScreenState extends State<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Warm the saved + history lists so the stat tiles show real numbers on
+    // first open rather than counting up after the user visits other tabs.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final String? uid = context.read<AuthProvider>().uid;
+      if (uid == null) return;
+      final RecipeProvider recipes = context.read<RecipeProvider>();
+      recipes.loadSaved(uid);
+      recipes.loadHistory(uid);
+    });
+  }
+
+  Future<void> _logout() async {
+    final bool confirmed = await _confirmLogout() ?? false;
+    if (!confirmed || !mounted) return;
+
+    final AuthProvider auth = context.read<AuthProvider>();
+    // Drop the loaded usage numbers before signing out, so the next user to
+    // sign in on this device never sees the previous one's totals.
+    context.read<UsageProvider>().reset();
     await auth.signOut();
-    if (!context.mounted) return;
+    if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(
       context,
       AppRoutes.login,
@@ -42,82 +71,90 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<bool?> _confirmLogout(BuildContext context) {
+  Future<bool?> _confirmLogout() {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: AppDimensions.brLg),
-        title: const Text('Log out?', style: AppTextStyles.title),
+        title: const Text('Log out?'),
         content: const Text(
           'You will need to sign in again to access your recipes.',
-          style: AppTextStyles.subtitle,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
-            child: const Text('Cancel'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+            ),
+            child: const Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Log out'),
+            child: const Text(AppStrings.logOut),
           ),
         ],
       ),
     );
   }
 
-  void _comingSoon(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _goToTab(BuildContext context, int index) {
-    if (onNavigateTab != null) {
-      onNavigateTab!(index);
+  void _goToTab(int index) {
+    final ValueChanged<int>? navigate = widget.onNavigateTab;
+    if (navigate != null) {
+      navigate(index);
     } else {
-      _comingSoon(context, 'Open this from the bottom navigation');
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Open this from the bottom navigation'),
+          ),
+        );
     }
   }
 
   /// A custom About dialog — no "View licenses" button (unlike the framework
   /// [showAboutDialog]).
-  void _showAbout(BuildContext context) {
+  void _showAbout() {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: AppDimensions.brLg),
         title: Row(
           children: [
-            const Icon(Icons.restaurant_menu, color: AppColors.primary),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text('AI Recipe Generator', style: AppTextStyles.title),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                gradient: AppColors.brandGradient,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.restaurant_menu_rounded,
+                color: AppColors.onPrimary,
+                size: AppDimensions.iconMd,
+              ),
             ),
+            const SizedBox(width: AppDimensions.spaceM),
+            const Expanded(child: Text(AppStrings.appName)),
           ],
         ),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(AppStrings.tagline, style: AppTextStyles.bodyMedium),
+            SizedBox(height: AppDimensions.spaceS),
+            Text(AppStrings.aboutBody, style: AppTextStyles.subtitle),
+            SizedBox(height: AppDimensions.spaceM),
             Text(
-              'Discover, generate, and save recipes with an AI cooking '
-              'assistant.',
-              style: AppTextStyles.subtitle,
+              'Version ${ProfileScreen.appVersion}',
+              style: AppTextStyles.caption,
             ),
-            SizedBox(height: 12),
-            Text('Version $_appVersion', style: AppTextStyles.caption),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-            child: const Text('Close'),
+            child: const Text(AppStrings.close),
           ),
         ],
       ),
@@ -126,18 +163,15 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
-    final name = (user?.name ?? '').trim();
-    final email = (user?.email ?? '').trim();
+    final AuthProvider auth = context.watch<AuthProvider>();
+    final user = auth.user;
+    final String name = (user?.name ?? '').trim();
+    final String email = (user?.email ?? '').trim();
 
-    // Live counts from the actual loaded lists — the server-maintained
-    // UserModel counters stay 0 until Cloud Functions land, so use the real
-    // Firestore data (warmed by MainShell / the Favorites + Saved tabs).
-    final recipe = context.watch<RecipeProvider>();
-    final int favoritesCount = recipe.favorites.length;
-    final int savedCount = recipe.saved.length;
+    final RecipeProvider recipes = context.watch<RecipeProvider>();
 
     return SafeArea(
+      bottom: false,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -146,238 +180,419 @@ class ProfileScreen extends StatelessWidget {
           child: ListView(
             padding: EdgeInsets.fromLTRB(
               context.pagePadding,
-              20,
+              AppDimensions.spaceL,
               context.pagePadding,
-              24,
+              AppDimensions.navBarClearance,
             ),
             children: [
-              const _Header(title: 'Profile'),
-              const SizedBox(height: 20),
-              Center(
-                child: GestureDetector(
-                  onTap: () =>
+              Text(AppStrings.profile, style: AppTextStyles.screenTitle),
+              const SizedBox(height: AppDimensions.spaceL),
+
+              FadeSlideIn(
+                child: _IdentityCard(
+                  name: name,
+                  email: email,
+                  photoUrl: user?.photoUrl,
+                  onEdit: () =>
                       Navigator.pushNamed(context, AppRoutes.editProfile),
-                  child: ProfileAvatar(
-                    radius: 48,
-                    imageUrl: user?.photoUrl,
-                    fallbackInitial: name.isNotEmpty ? name[0] : null,
-                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  name.isEmpty ? 'Your Profile' : name,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  email.isEmpty ? '—' : email,
-                  style: AppTextStyles.subtitle,
-                ),
-              ),
-              const SizedBox(height: 20),
+
+              const SizedBox(height: AppDimensions.spaceL),
               const _EmailVerificationBanner(),
-              const SizedBox(height: 4),
-              Row(
+
+              FadeSlideIn(
+                delay: AppAnimations.staggerFor(1),
+                child: Row(
+                  children: [
+                    _StatTile(
+                      label: 'Generated',
+                      value: recipes.history.length,
+                      icon: Icons.auto_awesome,
+                      onTap: () =>
+                          Navigator.pushNamed(context, AppRoutes.history),
+                    ),
+                    const SizedBox(width: AppDimensions.spaceM),
+                    _StatTile(
+                      label: AppStrings.tabSaved,
+                      value: recipes.saved.length,
+                      icon: Icons.bookmark_rounded,
+                      onTap: () => _goToTab(3),
+                    ),
+                    const SizedBox(width: AppDimensions.spaceM),
+                    _StatTile(
+                      label: AppStrings.tabFavorites,
+                      value: recipes.favorites.length,
+                      icon: Icons.favorite_rounded,
+                      onTap: () => _goToTab(1),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: AppDimensions.spaceXl),
+
+              _MenuGroup(
+                title: 'Activity',
                 children: [
-                  _statCard(
-                    'Favorites',
-                    favoritesCount,
-                    Icons.favorite,
-                    () => _goToTab(context, 1),
+                  _MenuRow(
+                    icon: Icons.favorite_border_rounded,
+                    label: AppStrings.myFavorites,
+                    onTap: () => _goToTab(1),
                   ),
-                  const SizedBox(width: 14),
-                  _statCard(
-                    'Saved',
-                    savedCount,
-                    Icons.bookmark,
-                    () => _goToTab(context, 3),
+                  _MenuRow(
+                    icon: Icons.bookmark_border_rounded,
+                    label: AppStrings.savedRecipes,
+                    onTap: () => _goToTab(3),
+                  ),
+                  _MenuRow(
+                    icon: Icons.history_rounded,
+                    label: AppStrings.usageHistory,
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.history),
+                  ),
+                  _MenuRow(
+                    icon: Icons.data_usage_rounded,
+                    label: AppStrings.usageMenuLabel,
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.usage),
+                  ),
+                  _MenuRow(
+                    icon: Icons.auto_awesome,
+                    label: AppStrings.tabAi,
+                    onTap: () => _goToTab(2),
+                    isLast: true,
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              _menuSection(context),
-              const SizedBox(height: 24),
-              PrimaryButton(
-                text: 'LOG OUT',
-                onPressed: () => _logout(context),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Text('Version $_appVersion', style: AppTextStyles.caption),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _statCard(String label, int value, IconData icon, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-            boxShadow: AppShadows.card,
-          ),
-          child: Column(
-            children: [
-              Icon(icon, size: 20, color: AppColors.secondary),
-              const SizedBox(height: 8),
-              Text(
-                '$value',
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
+              const SizedBox(height: AppDimensions.spaceL),
+
+              _MenuGroup(
+                title: 'Account',
+                children: [
+                  _MenuRow(
+                    icon: Icons.edit_outlined,
+                    label: AppStrings.editProfile,
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.editProfile),
+                  ),
+                  // Only password-backed accounts have a password to change; a
+                  // Google-only account would land on a form it can never
+                  // satisfy.
+                  if (auth.hasPasswordProvider)
+                    _MenuRow(
+                      icon: Icons.lock_outline_rounded,
+                      label: AppStrings.changePassword,
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        AppRoutes.changePassword,
+                      ),
+                    ),
+                  _MenuRow(
+                    icon: Icons.info_outline_rounded,
+                    label: AppStrings.about,
+                    onTap: _showAbout,
+                  ),
+                  _MenuRow(
+                    icon: Icons.delete_forever_outlined,
+                    label: AppStrings.deleteAccount,
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.deleteAccount),
+                    destructive: true,
+                    isLast: true,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: AppDimensions.spaceXl),
+
+              PrimaryButton(
+                text: AppStrings.logOut,
+                icon: Icons.logout_rounded,
+                variant: ButtonVariant.outlined,
+                onPressed: _logout,
+              ),
+
+              const SizedBox(height: AppDimensions.spaceL),
+              Center(
+                child: Text(
+                  '${AppStrings.appName} · v${ProfileScreen.appVersion}',
+                  style: AppTextStyles.label,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(label, style: AppTextStyles.caption),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _menuSection(BuildContext context) {
+/// The gradient identity header: avatar, name, email, and an edit affordance.
+class _IdentityCard extends StatelessWidget {
+  const _IdentityCard({
+    required this.name,
+    required this.email,
+    required this.photoUrl,
+    required this.onEdit,
+  });
+
+  final String name;
+  final String email;
+  final String? photoUrl;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.all(AppDimensions.spaceXl),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        boxShadow: AppShadows.card,
+        gradient: AppColors.brandGradient,
+        borderRadius: AppDimensions.brXl,
+        boxShadow: AppShadows.glow(AppColors.primary, alpha: 0.28),
       ),
-      child: Column(
+      child: Row(
         children: [
-          _menuRow(
-            Icons.favorite_border,
-            'My Favorites',
-            () => _goToTab(context, 1),
-          ),
-          _divider(),
-          _menuRow(
-            Icons.bookmark_border,
-            'Saved Recipes',
-            () => _goToTab(context, 3),
-          ),
-          _divider(),
-          _menuRow(
-            Icons.auto_awesome,
-            'Ask AI',
-            () => _goToTab(context, 2),
-          ),
-          _divider(),
-          _menuRow(
-            Icons.edit_outlined,
-            'Edit Profile',
-            () => Navigator.pushNamed(context, AppRoutes.editProfile),
-          ),
-          // Only password-backed accounts have a password to change; a
-          // Google-only account would land on a form it can never satisfy.
-          if (context.read<AuthProvider>().hasPasswordProvider) ...<Widget>[
-            _divider(),
-            _menuRow(
-              Icons.lock_outline,
-              'Change Password',
-              () => Navigator.pushNamed(context, AppRoutes.changePassword),
+          GestureDetector(
+            onTap: onEdit,
+            child: Stack(
+              children: [
+                ProfileAvatar(
+                  radius: 34,
+                  imageUrl: photoUrl,
+                  fallbackInitial: name.isNotEmpty ? name[0] : null,
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.edit_rounded,
+                      size: 12,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-          _divider(),
-          _menuRow(
-            Icons.info_outline,
-            'About',
-            () => _showAbout(context),
           ),
-          _divider(),
-          _menuRow(
-            Icons.delete_forever_outlined,
-            'Delete Account',
-            () => Navigator.pushNamed(context, AppRoutes.deleteAccount),
-            destructive: true,
+          const SizedBox(width: AppDimensions.spaceL),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name.isEmpty ? 'Your Profile' : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.sectionTitle.copyWith(
+                    color: AppColors.onPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.space2),
+                Text(
+                  email.isEmpty ? '—' : email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.onPrimary.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  /// A single menu row. [destructive] tints it with the error colour so a
-  /// dangerous action never looks like an ordinary one.
-  Widget _menuRow(
-    IconData icon,
-    String label,
-    VoidCallback onTap, {
-    bool destructive = false,
-  }) {
+/// One activity stat, tappable through to the matching screen.
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: PressableScale(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimensions.spaceL,
+            horizontal: AppDimensions.spaceS,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppDimensions.brLg,
+            boxShadow: AppShadows.card,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: AppDimensions.iconMd,
+                  color: AppColors.secondary),
+              const SizedBox(height: AppDimensions.spaceS),
+              Text(
+                '$value',
+                style: AppTextStyles.screenTitle.copyWith(
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: AppDimensions.space2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.label,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A titled card grouping related menu rows.
+class _MenuGroup extends StatelessWidget {
+  const _MenuGroup({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(
+            left: AppDimensions.spaceXs,
+            bottom: AppDimensions.spaceS,
+          ),
+          child: Text(title, style: AppTextStyles.label),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppDimensions.brLg,
+            boxShadow: AppShadows.card,
+          ),
+          child: ClipRRect(
+            borderRadius: AppDimensions.brLg,
+            child: Column(children: children),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A single menu row. [destructive] tints it with the error colour so a
+/// dangerous action never looks like an ordinary one.
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.destructive = false,
+    this.isLast = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool destructive;
+
+  /// Suppresses the trailing divider on the final row of a group.
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
     final Color accent = destructive ? AppColors.error : AppColors.primary;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        child: Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: accent.withValues(alpha: 0.08),
+        child: Column(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: destructive
-                    ? AppColors.error.withValues(alpha: 0.10)
-                    : AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.spaceL,
+                vertical: AppDimensions.spaceM,
               ),
-              child: Icon(icon, size: 20, color: accent),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: destructive
-                    ? AppTextStyles.body.copyWith(color: AppColors.error)
-                    : AppTextStyles.body,
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: destructive
+                          ? AppColors.error.withValues(alpha: 0.10)
+                          : AppColors.primaryFaint,
+                      borderRadius: AppDimensions.brSm,
+                    ),
+                    child: Icon(icon, size: 18, color: accent),
+                  ),
+                  const SizedBox(width: AppDimensions.spaceM),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: destructive
+                          ? AppTextStyles.body
+                              .copyWith(color: AppColors.error)
+                          : AppTextStyles.body,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: destructive
+                        ? AppColors.error
+                        : AppColors.textTertiary,
+                    size: AppDimensions.iconMd,
+                  ),
+                ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              color: destructive ? AppColors.error : AppColors.textSecondary,
-              size: 22,
-            ),
+            if (!isLast)
+              const Divider(
+                height: 1,
+                thickness: 1,
+                indent: 64,
+                color: AppColors.borderSoft,
+              ),
           ],
         ),
       ),
     );
   }
-
-  Widget _divider() => const Divider(
-        height: 1,
-        thickness: 1,
-        indent: 16,
-        endIndent: 16,
-        color: AppColors.border,
-      );
 }
 
 /// Shows an "unverified email" notice with a resend action, and disappears once
 /// the address is confirmed.
 ///
-/// Stateful on its own so [ProfileScreen] can stay stateless: the verified flag
-/// lives in the cached ID token and is stale until the account is re-read from
-/// the server, which this does on mount. Without that refresh the banner would
-/// still be there after the user clicked the link, which reads as broken.
+/// Stateful on its own so the verified flag — which lives in the cached ID
+/// token and is stale until the account is re-read from the server — can be
+/// refreshed on mount. Without that refresh the banner would still be there
+/// after the user clicked the link, which reads as broken.
 ///
 /// Renders nothing for Google accounts (already verified) and nothing while the
 /// first check is in flight, so a verified user never sees it flash.
@@ -401,7 +616,7 @@ class _EmailVerificationBannerState extends State<_EmailVerificationBanner> {
   }
 
   Future<void> _check() async {
-    final auth = context.read<AuthProvider>();
+    final AuthProvider auth = context.read<AuthProvider>();
     final bool verified = await auth.refreshEmailVerification();
     if (!mounted) return;
     setState(() {
@@ -412,7 +627,7 @@ class _EmailVerificationBannerState extends State<_EmailVerificationBanner> {
 
   Future<void> _resend() async {
     setState(() => _sending = true);
-    final auth = context.read<AuthProvider>();
+    final AuthProvider auth = context.read<AuthProvider>();
     final bool sent = await auth.resendEmailVerification();
     if (!mounted) return;
     setState(() => _sending = false);
@@ -434,89 +649,73 @@ class _EmailVerificationBannerState extends State<_EmailVerificationBanner> {
   Widget build(BuildContext context) {
     if (_checking || _verified) return const SizedBox.shrink();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.secondary.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.mark_email_unread_outlined,
-              color: AppColors.primaryDark, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Verify your email',
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primaryDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Confirm your address so you can recover your account if you '
-                  'lose your password.',
-                  style: AppTextStyles.caption,
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: _sending ? null : _resend,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(_sending ? 'Sending…' : 'Resend email'),
-                    ),
-                    const SizedBox(width: 18),
-                    TextButton(
-                      onPressed: _check,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text("I've verified"),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppDimensions.spaceL),
+      child: Container(
+        padding: const EdgeInsets.all(AppDimensions.spaceM),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: 0.12),
+          borderRadius: AppDimensions.brMd,
+          border: Border.all(
+            color: AppColors.warning.withValues(alpha: 0.45),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The screen's leading title row (matches the Favorites/Saved tab headers).
-class _Header extends StatelessWidget {
-  const _Header({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimary,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.mark_email_unread_outlined,
+              color: AppColors.primaryDark,
+              size: AppDimensions.iconMd,
+            ),
+            const SizedBox(width: AppDimensions.spaceM),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Verify your email',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  const SizedBox(height: AppDimensions.space2),
+                  Text(
+                    'Confirm your address so you can recover your account if '
+                    'you lose your password.',
+                    style: AppTextStyles.caption,
+                  ),
+                  const SizedBox(height: AppDimensions.spaceXs),
+                  Wrap(
+                    spacing: AppDimensions.spaceL,
+                    children: [
+                      TextButton(
+                        onPressed: _sending ? null : _resend,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(_sending ? 'Sending…' : 'Resend email'),
+                      ),
+                      TextButton(
+                        onPressed: _check,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text("I've verified"),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
