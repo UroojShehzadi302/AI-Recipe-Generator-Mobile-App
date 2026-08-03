@@ -6,12 +6,14 @@ import '../screens/change_password_screen.dart';
 import '../screens/delete_account_screen.dart';
 import '../screens/edit_profile_screen.dart';
 import '../screens/forgot_password_screen.dart';
+import '../screens/history_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/main_shell.dart';
 import '../screens/recipe_detail_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/search_screen.dart';
 import '../screens/splash_screen.dart';
+import '../screens/usage_screen.dart';
 
 /// Central route table for the app.
 ///
@@ -37,6 +39,8 @@ class AppRoutes {
   static const String editProfile = '/edit-profile';
   static const String changePassword = '/change-password';
   static const String deleteAccount = '/delete-account';
+  static const String history = '/history';
+  static const String usage = '/usage';
   static const String settings = '/settings';
 
   /// Resolves a [RouteSettings] into a [MaterialPageRoute].
@@ -66,6 +70,10 @@ class AppRoutes {
         return _page(const ChangePasswordScreen(), settings);
       case deleteAccount:
         return _page(const DeleteAccountScreen(), settings);
+      case history:
+        return _page(const HistoryScreen(), settings);
+      case usage:
+        return _page(const UsageScreen(), settings);
       case category:
         final args = settings.arguments;
         if (args is String) {

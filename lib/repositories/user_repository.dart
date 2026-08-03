@@ -56,6 +56,7 @@ class UserRepository {
   static const List<String> _flatSubcollections = <String>[
     'favorites',
     'generatedRecipes',
+    'usage',
   ];
 
   /// Permanently deletes [uid]'s profile document and everything beneath it.
