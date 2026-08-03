@@ -1,5 +1,5 @@
 name: ai_recipe_generator
-description: "AI Recipe Generator using Flutter, Firebase and Gemini"
+description: "CookMate AI — your smart AI cooking companion, built with Flutter, Firebase and Gemini."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -18,15 +18,41 @@ dependencies:
   firebase_auth: ^6.0.0
   cloud_firestore: ^6.0.0
 
+  # Google Sign-In (v7 API)
+  google_sign_in: ^7.2.0
+
+  # Networking (direct Gemini + TheMealDB)
+  http: ^1.2.0
+
   # State Management
   provider: ^6.1.5
-  google_fonts: ^8.1.0
-
+  image_picker: ^1.2.3
+  firebase_remote_config: ^6.5.5
+  firebase_messaging: ^16.4.3
+  shared_preferences: ^2.5.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Android launcher icon, generated from the brand logo.
+# Regenerate after changing assets/images/logo.png with:
+#   dart run flutter_launcher_icons
+# The adaptive-icon background is primaryDark (#5E3D26) so the Android 8+
+# circular/squircle mask blends with the logo's own brown field instead of
+# exposing a white corner.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#5E3D26"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  # Android crops the outer ~33% of an adaptive foreground; the inset keeps the
+  # pot and the circuit-tree inside the safe zone instead of clipping them.
+  adaptive_icon_foreground_inset: 18
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
@@ -34,3 +60,31 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - env.json
+
+  # Fonts are bundled locally (no google_fonts runtime fetch) so typography is
+  # correct offline and at first paint. Both are SIL OFL 1.1 — free for
+  # commercial use; the license files ship alongside them in assets/fonts/.
+  #
+  # Pairing: Fraunces (a warm old-style serif) carries headings and brand
+  # moments; Inter carries everything else. Referenced via
+  # AppTextStyles.displayFamily / .fontFamily — never hardcode these names.
+  #
+  # Fraunces is a VARIABLE font: one file covers the whole weight range, and
+  # Flutter maps `fontWeight` onto its `wght` axis. Listing it once with no
+  # `weight:` key is deliberate — adding per-weight entries for the same file
+  # would make Flutter synthesize weights instead of using the real axis.
+  fonts:
+    - family: Fraunces
+      fonts:
+        - asset: assets/fonts/Fraunces-Variable.ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700

@@ -1,0 +1,234 @@
+# CookMate AI — Project Context
+
+> Persistent context for this Flutter app. Read this first each session.
+> Last updated: 2026-08-04.
+
+## Branding (renamed 2026-08-04)
+The app is **CookMate AI** — *"Your Smart AI Cooking Companion"*. It was previously called "AI Recipe Generator"; that name should not appear in user-facing copy. `AppStrings.appName` / `AppStrings.tagline` are the single source, used by the splash, Login/Register, Profile, About dialog, and `MaterialApp.title`. The **Android launcher label** is `CookMate AI` (`AndroidManifest.xml`).
+⚠️ The Dart package (`ai_recipe_generator`), the `applicationId`, and the `namespace` are all deliberately **unchanged** — renaming them would break the owner's `google-services.json` (Firebase + Google Sign-In). Import paths still read `package:ai_recipe_generator/...`; that is expected, not a leftover.
+
+## What this is
+A production-intent **Flutter (Android-first) AI recipe app**: Firebase backend + Google Gemini. Premium **warm-brown / cream** brand. Users register, browse recipes, generate recipes with AI, chat with an AI cooking assistant, favorite/save recipes, and manage a profile. **Dev phase calls the Gemini Developer API directly** from the app; Cloud Functions is the production target (see D7).
+
+Design docs live in `documents/`: `prd.pdf`, `trd.pdf`, `afd.pdf`, `ui_ux design.pdf`, plus the authored `backend_architecture.md` (the real backend spec — the PDF named "backend artcitecture" is a mislabeled duplicate of the UI/UX brief), `refactoring_plan.md`, `completion_plan.md` (M1–M15 roadmap), and `project_status.md` (done/not-done tracker).
+
+## Golden rules (do not violate)
+1. **Design tokens only** — no hardcoded colors, font sizes, radii, or asset paths in screens/widgets. Use `AppColors`, `AppDimensions`, `AppTextStyles`, `AppShadows`, `AppDurations`, `AppAssets`, `AppStrings`.
+2. **No business logic in widgets.** Flow is **Widget → Provider → Repository → Service (SDK)**. Widgets never touch `FirebaseAuth`/`Firestore`/`Functions` directly.
+3. **Preserve branding** — warm brown `#8B5E3C`, cream `#F6F2EE`, the logo, and the Login design language. Don't restyle to a different look.
+4. Use `withValues(alpha:)` (never deprecated `withOpacity`), wildcard params `(_, _, _)`, `const` where possible.
+5. **After every change:** `flutter analyze` must stay at 0 errors/warnings (3 known `prefer_initializing_formals` info hints are accepted), and `flutter test` must pass.
+6. State management is **Provider** (mandated by the docs).
+7. **Don't set `physics:` on scrollables.** `AppScrollBehavior` is applied once on `MaterialApp` and gives every scrollable bouncing physics. The only exception is a *nested* scrollable, which still needs `NeverScrollableScrollPhysics`.
+8. **Animations are tokens too** — reuse `FadeSlideIn` / `PressableScale` from `app_animations.dart` and the curves/durations there rather than hand-rolling an `AnimationController` per screen.
+9. **A green `flutter test` does not mean the UI is right.** Several real defects this session (grid crash, nav bar centred, composer too high, colourless heart pop, flickering avatar) passed analyze, tests, *and* a release build. Anything visual needs the owner on a device — say so plainly rather than implying it's verified.
+
+## Tech stack
+Flutter 3.x / Dart, Material 3, Provider, Firebase (Auth, Firestore; **no Cloud Storage** — avatars are base64 in Firestore to stay on the free plan), **Firebase Cloud Messaging** (`firebase_messaging ^16.4.3`, receive-only push — owner sends free from the console, no Blaze), **`shared_preferences ^2.5.5`** (on-device notifications inbox only), **Google Sign-In** (`google_sign_in ^7.2.0`), **image_picker** (avatar gallery pick), **Google Gemini via the free Developer API called directly over `http`** (dev phase — Cloud Functions is the production target, see D7). Chat markdown uses a small in-house renderer (`markdown_text.dart`, no package) — supports headings/bold/italic/code/lists **plus blockquotes and pipe tables** (defensive: malformed tables degrade to text, never throw). Fonts: **Fraunces (variable, headings) + Inter (400/500/600/700, body)** bundled locally as assets (`assets/fonts/`), referenced via `AppTextStyles.displayFamily` / `.fontFamily`. `google_fonts` **removed** — no runtime font fetch. (Editing bundled fonts needs a full stop+run, not hot reload.)
+
+## Architecture / folders
+```
+lib/
+  main.dart                      # bootstrap: Firebase.initializeApp + runApp
+  firebase_options.dart          # generated (Android). apiKey is a public client id, not a secret
+  app/app.dart                   # RecipeGeneratorApp: builds DI graph + MultiProvider + MaterialApp
+  routes/app_routes.dart         # onGenerateRoute + route constants (typed args, e.g. Recipe)
+  core/
+    theme/    app_colors, app_dimensions, app_text_styles, app_durations, app_shadows,
+              app_animations (curves + FadeSlideIn/PressableScale),
+              app_scroll_behavior (app-wide bouncing physics), app_theme
+    constants/ app_assets, app_strings, sample_recipes   # sample_recipes = placeholder data (TODO: real feed M5)
+    config/   ai_config                # Gemini key+model; AiConfig.load() reads bundled env.json at RUNTIME
+    utils/    validators, responsive, image_source   # responsive = size-class helpers; image_source = data:URI/http → ImageProvider
+    error/    failure, error_mapper
+    widgets/  primary_button (variants + loading/disabled/press), app_text_field, google_button,
+              or_divider, section_title, loading_indicator, empty_state, app_error_view,
+              profile_avatar (ClipOval + cover; caches its ImageProvider),
+              category_chip, recipe_card, ai_assistant_card, markdown_text,
+              app_bottom_nav          # floating frosted nav bar (NavDestination + AppBottomNav)
+              favorite_button         # heart with pop + ring burst; instant red fill
+              recipe_opening_overlay  # branded "opening this recipe" loader
+              shimmer_loading         # in-house shimmer + RecipeCard/Rail/Grid skeletons (no package)
+  models/       recipe_model (Recipe/Nutrition/Ingredient), user_model, chat_message, chat_session,
+                app_notification (inbox item; JSON + dedupeKey),
+                generation_entry (Usage History row: recipe + prompt + date + status)
+  services/     auth_service, firestore_service,
+                meal_db_service (TheMealDB catalog), ai_service (interface),
+                gemini_direct_service (dev Gemini impl),
+                unconfigured_ai_service (no-key no-op),
+                notification_service (FCM facade),
+                notification_store (inbox persistence; STATIC — background isolate uses it)
+                                                                  # thin SDK seams; Firebase resolved LAZILY
+  repositories/ auth_repository, user_repository, recipe_repository, chat_repository
+  providers/    auth_provider, recipe_provider, chat_provider, notification_provider  # ChangeNotifiers
+  screens/      splash, login, register, forgot_password, main_shell, home,
+                recipe_detail, favorites, saved, profile, edit_profile,
+                avatar_crop (circular pan/zoom cropper),
+                change_password, delete_account, history (Usage History),
+                search, category_results, ai_hub (Generate|Chat)
+test/           widget_test, recipe_detail_test, auth_provider_google_test,
+                gemini_direct_service_test, ai_hub_screen_test, markdown_text_test,
+                chat_provider_history_test, home_catalog_test, responsive_shimmer_test,
+                notification_provider_test, validators_password_test,
+                desi_recipes_test, meal_db_service_test, search_test,
+                category_results_test, generation_entry_test,
+                ui_polish_test   # nav position/labels, buttons, fields, tap + heart
+                                 # animation, hero-tag contract, avatar provider
+                                 # caching, overflow, type scale
+(root)          env.json (git-ignored key, bundled as asset) + env.example.json,
+                firestore.rules, firestore.indexes.json, firebase.json,
+                .vscode/launch.json (AI-enabled run configs)
+```
+Services resolve `FirebaseAuth.instance` / `FirebaseFirestore.instance` **lazily** (getters, not constructors) so providers are constructible in unit tests without Firebase.
+
+## Design tokens (values) — rescaled 2026-08-04
+- **Colors** (`app_colors.dart`): `primary #8B5E3C`, `primaryDark #5E3D26`, `primarySoft #EDE3DA`, `primaryFaint #F7F1EC`, `secondary #D6A46D`, `background #F6F2EE`, `surface #FFFFFF`, `surfaceAlt #F3EEE9`, `scrim`, `textPrimary #2E2E2E`, `textSecondary #7A7A7A`, `textTertiary #A6A6A6`, `textDisabled`, `onPrimary`, `border #E0E0E0`, `borderSoft #EFEAE5`, `disabled`, `success`, `error`, `warning`, `info`. Plus gradients: `brandGradient`, `placeholderGradient`, `imageScrim`.
+- **Typography** (`app_text_styles.dart`) — **two families, split by job** (changed 2026-08-04; Poppins was dropped as too generic):
+  - **Fraunces** (`AppTextStyles.displayFamily`) — a warm old-style serif, cookbook/food-magazine voice. Used ONLY by `display 28/w600` · `screenTitle 22/w600` · `sectionTitle 18/w600`. Weights stop at w600 because old-style serifs get heavy fast.
+  - **Inter** (`AppTextStyles.fontFamily`) — everything meant to be *read*: `cardTitle 16/w600` · `body 14` · `bodyMedium 14/w500` · `subtitle 14` · `caption 12` · `label 11/w500` · `button 14/w600`. It is also the `ThemeData.fontFamily` default.
+  - ⚠️ **Do not set Fraunces below 16px.** The pairing works because the serif carries character at 18px+ and Inter stays legible at 11–14px; a heading font in a chip label undoes the whole thing. Both the family split and the theme default are locked by `test/ui_polish_test.dart`.
+  - Fraunces ships as a **variable font** (one file, `wght` axis) — listed in `pubspec.yaml` with *no* `weight:` keys on purpose; adding per-weight entries for the same file makes Flutter synthesize weights instead of using the real axis. Inter ships as four static TTFs (400/500/600/700).
+  - Both are **SIL OFL 1.1** (free for commercial use); license files ship in `assets/fonts/OFL-Fraunces.txt` and `OFL-Inter.txt`. Still no `google_fonts` dependency — everything is bundled, so type is right offline and at first paint.
+  - Aliases `heading`→screenTitle, `title`→sectionTitle, `subtitle` (14, secondary) exist so the ~200 legacy call sites kept working through the rescale *and* the family swap. **Editing bundled fonts needs a full stop+run, not hot reload.**
+- **Spacing** (4pt grid): `space2 2 · Xs 4 · S 8 · M 12 · L 16 · Xl 20 · Xxl 28 · Huge 40`.
+- **Radii**: `Xs 8 · Sm 12 · Md 16 (buttons+fields) · Lg 20 · Xl 24 (cards/sheets) · Pill 999`. Button height **52**, field padding **16**, icons `Sm 16 / Md 20 / Lg 24`.
+- **Two nav-bar spacing tokens — do not mix them up** (I got this wrong twice by eye; a test now pins `navBarOverlap < navBarClearance`):
+  - **`navBarClearance`** (96 = height + both margins + gap) — bottom **padding** for a **scrollable** inside a tab, so its last item scrolls fully clear of the bar. Home/Favorites/Saved/Profile/AI-Generate use it; forgetting it hides content behind the bar.
+  - **`navBarOverlap`** (76 = height + margin) — for a **bottom-pinned surface that paints to the screen edge**, e.g. the AI Chat composer. It only has to clear the bar itself. Using the larger `navBarClearance` there pushed the input visibly too high; using an outer *margin* instead left the white surface short of the bottom with a visible seam. Correct answer: white extends to the edge, gap goes *inside* as bottom padding.
+- **Shadows** (`app_shadows.dart`): `none · subtle · card · raised · selectedChip · button · glow(color, alpha)`. Low-opacity and tight — soft "lift", not drop-shadow.
+- **Motion**: `app_durations.dart` (`fast 120 · short 200 · medium 300 · long 450 · stagger/staggerCap`) + `app_animations.dart` (curves `enter/exit/standard/emphasized`, `staggerFor(index)`, and the reusable **`FadeSlideIn`** and **`PressableScale`** widgets).
+- **Scrolling**: `app_scroll_behavior.dart` — `AppScrollBehavior` is set once on `MaterialApp.scrollBehavior`, giving **every** scrollable bouncing physics + a stretch overscroll indicator. Do NOT re-specify `physics:` per widget; the exception is nested scrollables, which still need `NeverScrollableScrollPhysics`.
+
+## Security posture (hardened 2026-07-30)
+- **Global error handling** — `main()` runs inside `runZonedGuarded`, with `FlutterError.onError` + `PlatformDispatcher.instance.onError` wired. All uncaught errors funnel through one `_reportError` function in `main.dart`; adding Crashlytics later is a one-line change there. Before this, async errors vanished silently in release.
+- **Release build** — `isMinifyEnabled` + `isShrinkResources` with `android/app/proguard-rules.pro` (keeps Flutter embedding / Firebase / Play Services reflection targets; `-dontwarn com.google.android.play.core.**` is **required** — without it R8 fails on ~11 missing deferred-component classes). Verified: `flutter build apk --release` succeeds.
+- **Release signing** — `android/app/build.gradle.kts` reads `android/key.properties` (git-ignored) and falls back to debug signing when absent, so a fresh clone still builds. ⚠️ **Owner must generate a real keystore before any Play upload** (OWNER_SETUP.md §5) — and add its SHA-1 to Firebase, or Google Sign-In breaks in release.
+- **Sensitive logs** — FCM token and notification payloads are behind `kDebugMode`. `debugPrint` is NOT stripped in release, so unguarded logs would leak to any app reading logcat.
+- **Password policy** — min **8** chars (not Firebase's 6), must contain a letter AND a digit, max 128. Deliberately no symbol/case requirement. Locked by `test/validators_password_test.dart`.
+- **AI input** — `Validators.aiPrompt` caps prompts at 500 chars; the Chat composer now enforces it too (`maxLength` + a guard in `_send`), so one paste can't drain the free Gemini quota.
+- **Account deletion (Google Play requirement)** — `screens/delete_account_screen.dart` → `AuthProvider.deleteAccount` → `AuthRepository.deleteAccount` → `UserRepository.deleteUserData` + `AuthService.deleteAccount`. Requires typing `DELETE` **and** re-authentication (password field, or a fresh Google sign-in). **Order is load-bearing: Firestore data first, auth account last** — deleting the auth user first revokes the credentials the rules need to authorise the data deletion, permanently stranding the documents. `deleteUserData` walks the tree explicitly (favorites, generatedRecipes, each chat's messages, chats, then the profile doc) because Firestore has no client-side recursive delete. Returns `false` on cancellation with nothing deleted.
+- **Change password** — `screens/change_password_screen.dart`; asks for the current password up front rather than reacting to `requires-recent-login`.
+- **Email verification** — `_EmailVerificationBanner` in `profile_screen.dart`: stateful (so ProfileScreen stays stateless), calls `reloadUser()` on mount because `emailVerified` is cached in the ID token and stays stale after the user clicks the link. Hidden for Google accounts and while the first check is in flight.
+- **Still open:** no Crashlytics; Privacy Policy + Terms URLs needed for the Play listing (store-listing fields, not code).
+
+## UI/UX polish phase (2026-08-04)
+A presentation-only pass — **no architecture, repository, or Firebase/Gemini logic was changed.** What landed:
+- **Rebrand** to CookMate AI (see Branding above).
+- **Typography rescaled down** and centralized; 41 hardcoded `fontSize:` literals removed. The alias tokens (`heading`/`title`/`subtitle`) are what let this happen without touching every screen — keep them.
+- **New floating bottom nav** (`app_bottom_nav.dart`): pill-shaped and inset from the edges, **frosted** (translucent surface over a `BackdropFilter` blur — an opaque slab floating over a scrolling list reads as a rendering bug), with a **single sliding pill** indicator (`AnimatedAlign`) instead of per-tab backgrounds, outline→filled icon swaps, and the gradient-circle AI action. **Only the selected tab shows its label** (it expands downward via `AnimatedSize`) — that is what lets five destinations fit a 320dp phone; an earlier horizontal expansion overflowed by 15px.
+  - ⚠️ **The bar's root must not be a widget that expands vertically.** `Scaffold.bottomNavigationBar` passes *loose* vertical constraints, so a `Center` (the original root, added to cap width on tablets) grew to the full height and floated the bar into the middle of the screen. It is now `Column(mainAxisSize: MainAxisSize.min)` + an `Align` for horizontal centering only. Pinned by the "sits at the bottom of the Scaffold" test. `MainShell` sets **`extendBody: true`** so content scrolls *under* it — which is exactly why `navBarClearance` padding is mandatory on tab scrollables.
+- **Depth pass** — `AppColors.backgroundGradient` (a very subtle top-down warm wash) is applied once in `MainShell` so every tab shares it; the AI hero card gained a 3-stop gradient, translucent depth "orbs", and a lit sparkle badge; recipe cards gained a hairline border and always-on image scrim.
+- **App-wide bouncing scroll** via one `scrollBehavior` on `MaterialApp` (previously 24 of 27 scrollables specified nothing).
+- **Buttons/fields rebuilt**: `PrimaryButton` gained variants (primary/outlined/danger), an icon slot, a real disabled state, and press-scale + ripple; `AppTextField` gained focus-reactive icons, autofill hints, submit callbacks, and self-owned `FocusNode` lifecycle.
+- **Usage History (new feature, M-extra)** — `screens/history_screen.dart` + `models/generation_entry.dart` + `RecipeRepository.getGenerationHistory/deleteSavedRecipe` + `RecipeProvider.loadHistory/deleteHistoryEntry`. Rows group by day (Today/Yesterday/date), show the **prompt** that produced the recipe, relative time, and a Saved/Generated status pill; tap reopens, swipe deletes (with confirm). `saveRecipe` now records `prompt` + `status`, defaulting the prompt to `RecipeProvider.lastPrompt` so existing callers didn't change.
+- **Saved tab upgraded** with search, a 4-way sort sheet, long-press delete (optimistic, reverts on failure), and favoriting from the grid.
+- **Profile rebuilt**: gradient identity header, three live stat tiles (Generated/Saved/Favorites), grouped Activity/Account menus. The pre-existing Delete Account flow was **preserved as-is** — it already met the Play requirement (confirm + re-auth + Firestore-then-auth deletion order).
+- **RecipeCard**: `AspectRatio` image inside a `Flexible` (a fixed-height image overflowed short landscape cells — caught by `ui_polish_test.dart`), opt-in `heroEnabled`/`heroPrefix`, tinted stat chips, hairline `borderSoft` border.
+  - ⚠️ **The image decode size MUST come from `LayoutBuilder` constraints, not the `width` field.** Every grid (Favorites/Saved/Search/Category) passes `width: double.infinity`, and `(infinity * 2).round()` throws *"Unsupported operation: Infinity or NaN toInt"* — which rendered a red error box instead of the card on all four screens. Widget tests do NOT catch this on their own because `Image.network` never loads in a test env; the guard is the explicit grid+imageUrl case in `ui_polish_test.dart`.
+  - ⚠️ **`heroEnabled` defaults to false**, but is now switched ON at every list (Home rails, Favorites, Saved, Search, Category), each paired with a matching `Hero` on `RecipeDetailScreen`. Leave it off anywhere the destination has no hero — a hero with no match costs work and animates to nothing.
+
+## Tap / open animations (2026-08-04)
+- **Card press.** `PressableScale` now scales to **0.94** (was 0.97 — a 3% shrink was invisible) and releases on `easeOutBack` so the surface *pops* rather than merely returning.
+  - ⚠️ **`confirmBeforeTap: true` is what makes it visible on a card.** Firing `onTap` on finger-up meant the route push began on the same frame and the animation never rendered — the user reported "no animation occurred". The flag holds the press, plays the rebound, *then* runs the callback. It is ON for `RecipeCard` and deliberately OFF elsewhere: adding ~240ms to a filter chip just reads as lag.
+- **Opening overlay.** `core/widgets/recipe_opening_overlay.dart` replaces the anonymous spinner used while a partial card is resolved (Home rails, Category). Shows the tapped recipe's own photo in a rotating brand arc plus its title. Same wait, but it reads as progress instead of a stall.
+- **Hero flight.** Card photo flies into the detail header. `RecipeDetailScreen.heroTag` is optional and null for AI-generated recipes (no originating card).
+  - ⚠️ **Both ends must derive the tag from `RecipeCard.heroTagFor(recipe, prefix:)`.** Hand-building the string at a call site and drifting means the flight silently does nothing — no error, just no animation. Every list passes its own prefix (`fav-`, `saved-`, `popular-`, `quick-`, `desi-`, `cat-`, `search-`) because Home can show the same recipe in two rails at once and **duplicate hero tags throw at runtime**. On the fetch path the tag is computed from the *card's* recipe before the network call, since the resolved object could otherwise produce a different tag.
+- **Favorite heart.** `core/widgets/favorite_button.dart` — squash → overshoot → settle, with a red ring expanding and fading behind it. Un-favoriting just fades; celebrating a removal would be odd.
+  - ⚠️ **The fill must lead the animation, not trail it.** The heart commits to filled-red on the same frame as the tap via an internal optimistic flag (cleared in `didUpdateWidget`), and the outline→filled `AnimatedSwitcher` cross-fade is skipped on the way in. Waiting for `isFavorite` to round-trip through the Firestore write made it pop *colourless* and turn red afterwards.
+  - The burst ring is wrapped in a **zero-size `SizedBox`**, not an `OverflowBox` — the latter takes an infinite size in an unbounded parent (a Row/Column) and crashes layout.
+
+## Rebuild isolation (why the avatar glitched)
+Favoriting from Home made the profile picture visibly flicker. Two independent causes, both fixed — worth understanding before touching either file:
+1. **`ProfileAvatar` re-decoded its image on every build.** Avatars are base64 `data:` URIs; `imageProviderFromUrl` runs `base64Decode` and returns a **new** `Uint8List` each call, and `MemoryImage` keys its cache on that list's *identity*. Resolving inside `build()` therefore made every rebuild a cache miss → re-decode → flicker. The provider is now resolved once in `initState` and rebuilt only when the URL changes (plus `gaplessPlayback: true`). Pinned by a test asserting the provider is `identical` across an unrelated rebuild.
+2. **The header was being rebuilt at all.** `HomeScreen.build()` calls `watch<RecipeProvider>()`, so any heart tap rebuilt the entire Home tree. The greeting row and bell are now separate widgets (`_HomeHeader`, `_NotificationBell`) that `select` only what they need, so a favorite can't reach the avatar.
+
+## Avatar cropping (2026-08-04)
+`screens/avatar_crop_screen.dart` — after picking from the gallery, the user positions a **circular window** over the photo (drag to pan, pinch to zoom) and the framed region is exported as a square image.
+
+- **Why it exists:** `pickImage(maxWidth: 400, maxHeight: 400)` only *constrains* dimensions, it doesn't crop — a portrait photo stayed tall and letterboxed with black bars inside the circular avatar. Cropping square on the way in is the actual fix.
+- **No new dependency.** The crop replays the user's own `TransformationController` matrix onto a `ui.PictureRecorder` canvas, so the export can't disagree with the preview. (`image_cropper` was considered and rejected: extra dependency, Android manifest entries, and a non-branded system UI.)
+- ⚠️ **`outputSize` is 384px on purpose.** Avatars are stored base64 **inside the Firestore user document**; base64 inflates bytes ~33%, `AuthRepository` rejects anything over **700 KB**, and Firestore documents cap at 1 MB. 384px is sharp at every size the app renders an avatar (largest circle is 68px diameter). Raising it risks tripping the 700 KB guard. Flutter's `toByteData` offers only PNG/raw — there is no JPEG option without a package, which is the other reason to keep the pixel count modest.
+- `ProfileAvatar` uses `ClipOval` + `BoxFit.cover` (not `CircleAvatar.backgroundImage`) so the circle is **always filled**, including for Google account photos we don't control. Edit Profile's preview reuses `ProfileAvatar` rather than keeping a near-duplicate copy.
+
+## Backend decisions (from backend_architecture.md — authoritative)
+- **D1** AI tab = "AI Hub" with two modes (Generate + Chat).
+- **D2** Favorite = bookmark any recipe; Saved = AI-generated recipes the user kept.
+- **D3** Generated recipes are private (`users/{uid}/generatedRecipes`), not in global `/recipes`.
+- **D4** Favorites store a **full embedded Recipe snapshot** (offline-safe, no dangling refs).
+- **D5** Home reads a single cached `home_feed/{locale}` doc (built by a Function).
+- **D6** Curated images = URLs; only avatars use Storage.
+- **D7** *(production target)* Gemini via a Cloud Function (App Check + rate limits); key never ships in the app. **⚠️ OVERRIDDEN for the dev phase (2026-07-11):** to avoid Blaze/Cloud Functions cost on this university/portfolio build, dev calls the **free Gemini Developer API directly** from the app. Clean seam preserved: `AiService` interface → `GeminiDirectService` (dev) / future Cloud-Functions impl. Migration = swap one line in `app/app.dart`; repos/providers/UI untouched. **Key source = Firebase Remote Config** (2026-07-15): `AiConfig.load()` resolves the key/model in this order — (1) **Firebase Remote Config** params `gemini_api_key` + `gemini_model` (`firebase_remote_config ^6.5.5`; `fetchAndActivate`, `minimumFetchInterval` 1h, `fetchTimeout` 10s), (2) the git-ignored **`env.json`** asset (local-dev fallback so `flutter run` works before the console value is set), (3) `--dart-define`. The whole chain is non-fatal — any Remote Config error (offline, Firebase not init in unit tests) is caught and falls through. **Owner step:** Firebase console → Remote Config → add parameter `gemini_api_key` (value = the Gemini key) and optionally `gemini_model`, then Publish; the running app picks it up on the next fetch — no rebuild/republish needed. **Model = `gemini-flash-latest`** (the pinned `gemini-2.0-flash` returns HTTP 429 `limit: 0` — zero free-tier quota on this project). The key is still extractable from the running app (same dev tradeoff) — Remote Config only makes it changeable without a rebuild (the reason prod still moves to D7).
+- Firestore schema, complete `firestore.rules`, indexes, and Functions are specified in `backend_architecture.md` §6–§12.
+
+## Build status (see project_status.md for detail)
+- ✅ Foundation (tokens, theme, widgets, models, validators, error mapping)
+- ✅ M1 Architecture (providers/repos/services/router/DI)
+- ✅ M4 (partial): email register/login + **forgot password** work. **Google Sign-In wired in code** (`google_sign_in ^7.2.0`, v7 API: `initialize`→`authenticate`→Firebase credential; cancel handled silently). Not device-verified — owner must finish console setup (see below).
+- ✅ M5 Home (redesigned; now on **live catalog** — `RecipeProvider.loadHomeCatalog` drives three rails: **Popular** (live TheMealDB Dinner/Beef), **Pakistani Favourites** (curated `DesiRecipes`), **Quick & Easy** (live TheMealDB Breakfast), with pull-to-refresh and resolve-partial-card-on-tap. **Load is seed-then-upgrade** so Home is never empty/stuck: phase 1 seeds instantly (desi = local, Popular/Quick = `SampleRecipes` fallback) and marks loaded; phase 2 upgrades Popular/Quick to live TheMealDB in the background, silently keeping the seed on any network failure/timeout. `SampleRecipes` now backs only the category-chip labels, the Recipe Detail placeholder, and the offline seed. Test: `test/home_catalog_test.dart`.)
+  - **Desi images fixed:** the 10 `DesiRecipes` reused ~5 mismatched TheMealDB URLs (Kheer showed biryani, Karahi showed fish, etc.). TheMealDB has no Pakistani dishes, so images now come from **Wikimedia Commons** (dish-accurate, free-licensed, 500px thumbnails). Two are close approximations (Chana Daal → dal-makhani photo, Chana Chaat → chana-masala photo) — no exact Wikipedia image exists for those Pakistani preparations.
+  - **Build-blocker fixed:** `pubspec.yaml` had lost its `google_sign_in ^7.2.0` + `http` deps (imports failed → app wouldn't compile) and never listed `env.json` as an asset (AI silently fell back to "coming soon" on plain `flutter run`). All three restored.
+- ✅ M7 Recipe Detail (full page; a prior blank-body bug from a greedy `Center` in the bottom bar is fixed + guarded by test)
+- ✅ M8 Favorites & Saved (real Firestore reads/writes; hearts on Home + Detail; Favorites/Saved tabs)
+- ✅ Responsive UI + shimmer loading — `core/utils/responsive.dart` (breakpoints 600/1024; grids go 2→3→4 columns, page padding + rail card/height scale up on wider screens) applied to Home, Search, Categories, Favorites, Saved. Loading states use a dependency-free shimmer (`core/widgets/shimmer_loading.dart`: `Shimmer` + `RecipeCardSkeleton`/`RecipeRailSkeleton`/`RecipeGridSkeleton`) instead of plain spinners on Home rails, Search, and Categories. Tests: `test/responsive_shimmer_test.dart`.
+- ✅ Profile tab — full page: avatar (tap → Edit Profile) + name + email, tappable **Favorites/Saved** stat cards showing **live counts** (from the loaded `RecipeProvider.favorites`/`saved` lists, since the server-maintained `UserModel` counters stay 0 until Cloud Functions land), a menu section (My Favorites / Saved Recipes / Ask AI switch tabs via `onNavigateTab` from `MainShell`; **Edit Profile** → real screen; **About** = custom dialog, no "view licenses"), **Log Out with a confirm dialog**, app-version footer. Responsive (centered, `maxContentWidth`).
+- ✅ **Edit Profile (M11)** — `screens/edit_profile_screen.dart`: change display name + **set an avatar** (gallery via `image_picker`, downscaled to 400px/q70). Flow: `AuthProvider.updateProfile(name, avatarFile)` → `AuthRepository.updateProfile` → FirebaseAuth `updateDisplayName` + Firestore `/users/{uid}` upsert. **Avatar is stored as a compressed base64 `data:` URI IN the Firestore user doc — FREE, no Cloud Storage/Blaze** (Firebase now gates Storage behind Blaze; same reason we avoid Functions per D7). `core/utils/image_source.dart` (`imageProviderFromUrl`) renders either a `data:` URI (→ `MemoryImage`) or an http URL (→ `NetworkImage`); used by `ProfileAvatar` + the edit preview. Raw image capped at 700 KB (safety net under Firestore's 1 MB doc limit) → `StorageFailure`. No `firebase_storage` dependency. Works fully on the free plan today.
+- ✅ M6 AI Generate & M9 AI Chat — **implemented end-to-end** (backend + UI). Service: `GeminiDirectService` (direct Gemini REST over `http`); recipe generation uses JSON-mode (`responseSchema` → `Recipe`), chat scoped to cooking; verified live. UI: `screens/ai_hub_screen.dart` = the "Ask AI" tab (index 2 in `main_shell`), a segmented **Generate | Chat** hub (per D1). Generate → prompt → `RecipeProvider.generate` → `RecipeDetailScreen` → Save. Chat → bubbles + typing dots + composer → `ChatProvider.sendMessage`. AI replies render markdown via `core/widgets/markdown_text.dart` (headings/bold/italic/code/lists — a lightweight token-styled renderer, no external package); the user's own bubbles stay plain text. **Chat history:** header has **New chat** + **History** actions; conversations persist per-user to `users/{uid}/chats/{chatId}` (+ `messages` subcollection) via `ChatRepository` (createChat/touchChat/getChats/getMessages/deleteChat/generateTitle) and `ChatProvider` (newChat/openChat/loadSessions/deleteSession); history shown in a bottom sheet (`_HistorySheet`). **Titles are AI-generated:** a new chat gets a provisional truncated-prompt title, then `AiService.generateTitle` (extra Gemini call, `_titleSystemPrompt`) upgrades it from the first exchange — runs *after* the reply is shown so it adds no perceived latency; best-effort (keeps provisional title on failure). Persistence is best-effort and requires sign-in (uid); signed-out chat still works but isn't saved. `ChatSession` model = `models/chat_session.dart`. Key source = **Firebase Remote Config** (`gemini_api_key` + `gemini_model`), falling back to git-ignored `env.json` then `--dart-define`; **model = `gemini-flash-latest`** (pinned `gemini-2.0-flash` has **zero free-tier quota** on this project — use the `-latest` alias). M3 (full backend/Functions) deferred to production.
+- ✅ **Push notifications (FCM) — receive-only** (`firebase_messaging ^16.4.3`). Clean seam per the app's architecture: `services/notification_service.dart` (thin, lazy `FirebaseMessaging.instance` — `requestPermission` / `getToken` / `onMessage` / `onMessageOpenedApp` / `getInitialMessage`, plus a static `toAppNotification(RemoteMessage)` mapper) → `providers/notification_provider.dart` (`ChangeNotifier`, wired into the `app.dart` MultiProvider; **construction is Firebase-free**, `init()` is called after the first frame by `MainShell` so unit tests stay safe — requests permission, resolves/logs the FCM token, listens to foreground + tap-to-open streams, accumulates `AppNotification`s newest-first, exposes `unreadCount`/`hasUnread`, `markRead(key)` / `markAllRead()` / `remove(key)` / `clear()` / `refresh()`; never throws to the UI) → `models/app_notification.dart` (plain, Firebase-free: title/body/receivedAt/read + `toJson`/`fromJson` and a `dedupeKey`). **UI:** the Home header **bell** shows a live unread **badge** (`_notificationBell` reads `NotificationProvider.unreadCount`) and on tap opens a branded **notifications inbox bottom sheet** (`_NotificationInboxSheet` in `home_screen.dart`) — title/body/relative-time rows (unread ones tinted + trailing red dot), **tap a row to mark just that one read**, **swipe end-to-start to delete one** (`Dismissible` → `remove`), and a **⋯ menu** with *Mark all read* / *Clear all*, plus a branded empty state; design tokens only. **Background/terminated** messages handled by a top-level `@pragma('vm:entry-point')` `_firebaseMessagingBackgroundHandler` registered via `FirebaseMessaging.onBackgroundMessage(...)` in `main.dart` (after `Firebase.initializeApp`, before `runApp`; logs the message and appends it to the store — non-fatal; the OS renders the tray notification). **Android manifest:** added a default FCM notification-channel `meta-data` (`com.google.firebase.messaging.default_notification_channel_id` → `@string/default_notification_channel_id`, id `recipe_default_channel` in new `res/values/strings.xml`); `POST_NOTIFICATIONS` (Android 13+) is contributed by the plugin manifest and requested at runtime via `requestPermission()`. Test: `test/notification_provider_test.dart` (accumulate/dedupe/markRead/markAllRead/remove/clear/refresh/persistence/pruning + mapping, no Firebase; uses `SharedPreferences.setMockInitialValues`). **⚠️ OWNER:** notifications are **SENT for free from the Firebase console → Cloud Messaging (Notifications composer)** — "Send test message" to a device's FCM token (printed to logcat as `FCM token: …` on launch), or Create/Send a campaign to a token/topic. **No Blaze/server needed** (app only receives). **Test on a real device** — emulators often lack Play Services and won't receive FCM. Note the project has **two** registered Android apps (`com.example.ai_recipe_generator` = the one built, and an unused `com.urooj.ai_recipe_generator`); a campaign aimed at the wrong one silently delivers nothing, so prefer token-targeted "Send test message". Harmless on-device log noise: `GoogleApiManager` / `Phenotype` / `FlagStore` / `providerinstaller` `DEVELOPER_ERROR` lines are Play-Services internals, unrelated to FCM — if the `FCM token:` line prints, delivery works.
+  - **Inbox persistence + housekeeping (2026-07-29):** the inbox survives restarts. `services/notification_store.dart` = a static, Firebase-free seam over **`shared_preferences ^2.5.5`** (JSON list under key `notifications_inbox`, `maxStored` 50, every method best-effort/never throws). Static by necessity: the FCM background isolate has no access to the provider graph, so `_firebaseMessagingBackgroundHandler` calls `NotificationStore.append` directly — that's how a notification received while the app is closed reaches the inbox even if the user never taps it. `load()` calls `prefs.reload()` first because SharedPreferences caches per-isolate and the main isolate would otherwise never see background-isolate writes. `MainShell` is a `WidgetsBindingObserver` and calls `NotificationProvider.refresh()` on `AppLifecycleState.resumed` to merge those in. **De-dupe is by `AppNotification.dedupeKey`** (the FCM id, or `title|body` when FCM supplies no `messageId`) — keying on the raw id was a real bug: id-less entries were treated as new on every resume, so the inbox grew a copy per resume and read ones came back unread. Tradeoff: two id-less notifications with identical title+body collapse into one. **Retention:** on `init()`, read notifications older than `NotificationProvider.readRetention` (7 days) are pruned; **unread are never auto-pruned** (silently dropping something unseen is worse than a long list).
+
+## Firebase console state
+- Project: `ai-recipe-generator-db27c` (treat as **dev**; prod not created yet).
+- ✅ Email/Password auth enabled (the earlier `CONFIGURATION_NOT_FOUND` was this being off).
+- ✅ Firestore created — region `asia-south1` (Mumbai). **Real rules authored** in `firestore.rules` (+ `firestore.indexes.json`, wired via `firebase.json`): owner-only `users/{uid}/**` (covers favorites / generatedRecipes / chats / messages), read-only `/recipes` + `/home_feed`, deny-by-default. **✅ DEPLOYED 2026-07-29** — the open test-mode rules are gone; the database is now locked down. Redeploy after edits with `firebase deploy --only firestore:rules,firestore:indexes --project ai-recipe-generator-db27c`. Safe for the app as written: every client read/write lives under `users/{uid}/…` (verified in `recipe_repository`, `chat_repository`, `user_repository`), and nothing writes `/recipes` or `/home_feed`. (Rules intentionally diverge from backend doc §8 — no App Check / Functions-only writes — until that infra lands; see the header comment in `firestore.rules`.)
+- **Cloud Storage: intentionally NOT used** — Firebase now requires the Blaze (paid) plan to enable Storage, so avatars are stored as base64 in the Firestore user doc instead (free). No owner action needed for avatars.
+- **Remote Config (Gemini key): OWNER STEP** — the Gemini API key now comes from **Firebase Remote Config** (`firebase_remote_config`, free) so it can be changed from the console AFTER deployment without rebuilding/republishing. Owner: Firebase console → **Remote Config** → add parameter **`gemini_api_key`** (value = the Gemini key) and optionally **`gemini_model`** (defaults to `gemini-flash-latest`), then **Publish**. The app fetches on the next launch (min interval 1h). `env.json` remains the local-dev fallback so `flutter run` works before the console value is set. The key is still extractable from the running app (same dev tradeoff) — Remote Config just makes it rotatable without a rebuild.
+- API key: advised to restrict in Google Cloud Console (Android app + SHA-1). It's a client identifier, not a real secret; GitHub secret-scan alert is a false positive for Firebase client keys.
+- Android package name: `com.example.ai_recipe_generator` (still the default `com.example` — must change before publishing).
+- Debug SHA-1: `C1:0E:2C:BE:D8:F4:4D:4D:71:3E:93:E0:ED:D9:68:C0:58:F3:3A:53` (needed for Google Sign-In + key restriction).
+
+## OPEN DECISIONS (blockers — need the owner)
+1. **Content source** — seed curated recipes vs. recipe API vs. AI-only (drives Home/Search/Detail real data).
+2. ~~**Gemini platform**~~ ✅ **RESOLVED (dev):** free **Gemini Developer API**, called directly (no Vertex).
+3. ~~**Cloud Functions billing / Blaze**~~ ✅ **RESOLVED (dev):** not using Cloud Functions or Blaze during development. (Revisit for production per D7.)
+4. AI gating for unverified emails? 5. Nutrition accuracy (AI estimate vs. API)? 6. AI rate-limit numbers.
+
+## Git / workflow
+- Working branch: **`refactor/foundation`**. **Nothing committed yet** this whole effort (user hasn't asked to commit).
+- Don't commit unless asked. When committing, end messages with the Co-Authored-By line.
+
+## Running & testing
+- Run: plain `flutter run` (or the IDE ▶ button) — **the flag is no longer needed**. `AiConfig.load()` reads the git-ignored `env.json` **bundled as an asset** at runtime (see `pubspec.yaml assets`), so AI works with any launch method as long as `env.json` exists locally with a valid key. (`--dart-define-from-file=env.json` still works as a fallback; the `.vscode/launch.json` config keeps it too.) If `env.json` is missing/keyless, AI degrades to "coming soon". Needs an Android device/emulator; internet for Firebase + TheMealDB images + Gemini. **Editing `env.json` requires a full stop+run** (assets are bundled at build, not hot-reloaded).
+- New screens/routes require a **full restart** (`R` / stop+run), not hot reload.
+- `flutter analyze` and `flutter test` before considering work done. The assistant cannot run the app on the device — the user verifies UI; ask for the exact on-screen/console text when debugging.
+- **Build gotcha (fixed):** on this Kotlin 2.3.20 / Gradle 9.1.0 toolchain, compiling `google_sign_in_android` failed with *"Could not close incremental caches … is already registered"*. Fixed by `kotlin.incremental=false` in `android/gradle.properties`. `flutter build apk --debug` succeeds (compiles the Kotlin modules without a device — use it to verify Android builds). Don't remove that flag until the toolchain is upgraded.
+
+## Google Sign-In — console setup DONE (2026-07-15)
+The code stack is complete (`services/auth_service.dart` `signInWithGoogle` + `kGoogleServerClientId`, `repositories/auth_repository.dart`, `providers/auth_provider.dart`, Login/Register handlers navigate on success) AND the owner has completed the console side: Google enabled, debug SHA-1 added, and the **new `google-services.json` (with `oauth_client` entries) is in `android/app/`**. Should now work on-device — **owner to smoke-test the button and confirm** (ask for the exact on-screen/console text if it errors). Cancellation returns `null` from the repo → provider stays idle, no error snackbar.
+
+## Next unblocked work
+Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**, plus the **2026-07-30 security hardening pass** (see Security posture above) and the **2026-08-04 UI/UX polish + CookMate AI rebrand** (see the polish / animation / avatar-crop sections above). `flutter analyze` = 0 (3 accepted hints), `flutter test` = **122 pass**, `flutter build apk --release` succeeds with R8 (56.1 MB).
+
+**Owner should device-verify the polish pass** (none of this is testable from the assistant's side — several of these were reported by the user *after* tests + release build passed, which is exactly why they need eyes on a device):
+- The floating nav bar on a small phone (320–360dp wide) and in landscape; that it sits at the **bottom**, and that no tab's last list item hides behind it.
+- **Favorites and Saved grids** — these rendered a red error box before the `cacheWidth` infinity fix; confirm cards paint.
+- Tap a Home rail card: press-and-pop → branded opening overlay → photo flies into the detail header.
+- Tap hearts repeatedly on Home: the heart should be **red for the whole pop**, and the profile picture in the header must **not** flicker.
+- Usage History: generate a recipe → save → Profile → Usage History → tap to reopen, swipe to delete.
+- Edit Profile → pick a **tall/portrait** photo → the crop screen should let you position the circle, and the saved avatar should fill it with no black bars.
+
+Remaining:
+
+**Owner-only (blockers, not code):**
+- ✅ ~~Deploy `firestore.rules`~~ **DONE 2026-07-29** — deployed to `ai-recipe-generator-db27c`; the open test-mode rules are gone. Worth a quick on-device pass over favorites / saved / chat history to confirm nothing reads or writes outside `users/{uid}/…`.
+- **Smoke-test Google Sign-In** on-device (console setup + `google-services.json` are now in place).
+- Verify TheMealDB reachability on the device: if Home's Popular/Quick rails only ever show the `SampleRecipes` seed (never live dishes), the device/emulator can't reach `themealdb.com` — network/emulator issue, not app logic.
+- ✅ ~~Smoke-test push notifications~~ **DONE (2026-07-29, Infinix X663):** permission granted, token resolved, console "Send test message" delivered to the tray, tap-to-open lands in the in-app inbox, badge counts correctly, and the inbox persists across restarts.
+
+**Code-only, unblocked (lower priority / polish):**
+- ✅ Fonts bundled locally, google_fonts removed (now **Fraunces + Inter**; Poppins was dropped 2026-08-04); ✅ markdown blockquotes + tables; ✅ all 10 desi images now exact Wikimedia matches (incl. Chana Daal / Chana Chaat).
+- ⚠️ Do NOT change the package name off `com.example.ai_recipe_generator` — the owner's `google-services.json` is registered to it; renaming would break Firebase + Google Sign-In. Defer to a deliberate prod rename (new Firebase app + SHA-1 + re-download).
+- Optional: tighten rules toward §8 when App Check + Functions land.
+
+**Deferred to production:** M3 (Cloud Functions / full backend) per D7. Real content-source decision (Open Decision 1) — Home/Search/Detail run on the TheMealDB + curated-desi blend until then.
+
+**Owner blockers before a Play Store release:** generate a real signing keystore (OWNER_SETUP.md §5) + add its SHA-1 to Firebase; host Privacy Policy + Terms URLs for the store listing. Neither is a code change.

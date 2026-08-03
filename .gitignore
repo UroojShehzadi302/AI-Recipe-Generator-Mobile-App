@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Secrets / local dev config (holds the Gemini Developer API key).
+# Commit env.example.json as the template; never commit the real key.
+env.json
+
 # Symbolication related
 app.*.symbols
 
