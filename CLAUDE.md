@@ -19,7 +19,7 @@ Design docs live in `documents/`: `prd.pdf`, `trd.pdf`, `afd.pdf`, `ui_ux design
 4. Use `withValues(alpha:)` (never deprecated `withOpacity`), wildcard params `(_, _, _)`, `const` where possible.
 5. **After every change:** `flutter analyze` must stay at 0 errors/warnings (3 known `prefer_initializing_formals` info hints are accepted), and `flutter test` must pass.
 6. State management is **Provider** (mandated by the docs).
-7. **Don't set `physics:` on scrollables.** `AppScrollBehavior` is applied once on `MaterialApp` and gives every scrollable bouncing physics. The only exception is a *nested* scrollable, which still needs `NeverScrollableScrollPhysics`.
+7. **Don't set `physics:` on scrollables.** `AppScrollBehavior` is applied once on `MaterialApp` and gives every scrollable bouncing physics. The only exception is a *nested* scrollable, which still needs `NeverScrollableScrollPhysics`. ⚠️ This is enforced by a test that walks `lib/` — and it caught a real regression: Home set `physics: AlwaysScrollableScrollPhysics()` for pull-to-refresh, which **silently replaced** the bounce (the behavior already supplies an `AlwaysScrollableScrollPhysics` *parent*, so that need was met). Home got Android's hard stop for the whole polish pass before anyone noticed.
 8. **Animations are tokens too** — reuse `FadeSlideIn` / `PressableScale` from `app_animations.dart` and the curves/durations there rather than hand-rolling an `AnimationController` per screen.
 9. **A green `flutter test` does not mean the UI is right.** Several real defects this session (grid crash, nav bar centred, composer too high, colourless heart pop, flickering avatar) passed analyze, tests, *and* a release build. Anything visual needs the owner on a device — say so plainly rather than implying it's verified.
 
@@ -51,20 +51,25 @@ lib/
               shimmer_loading         # in-house shimmer + RecipeCard/Rail/Grid skeletons (no package)
   models/       recipe_model (Recipe/Nutrition/Ingredient), user_model, chat_message, chat_session,
                 app_notification (inbox item; JSON + dedupeKey),
-                generation_entry (Usage History row: recipe + prompt + date + status)
+                generation_entry (Usage History row: recipe + prompt + date + status),
+                usage_entry (UsageEntry + UsageSummary; AI token cost per call)
   services/     auth_service, firestore_service,
                 meal_db_service (TheMealDB catalog), ai_service (interface),
                 gemini_direct_service (dev Gemini impl),
                 unconfigured_ai_service (no-key no-op),
+                usage_sink (UsageSink seam + NullUsageSink; how token cost leaves the AI service),
                 notification_service (FCM facade),
                 notification_store (inbox persistence; STATIC — background isolate uses it)
                                                                   # thin SDK seams; Firebase resolved LAZILY
-  repositories/ auth_repository, user_repository, recipe_repository, chat_repository
-  providers/    auth_provider, recipe_provider, chat_provider, notification_provider  # ChangeNotifiers
+  repositories/ auth_repository, user_repository, recipe_repository, chat_repository,
+                usage_repository (IS the UsageSink; users/{uid}/usage)
+  providers/    auth_provider, recipe_provider, chat_provider, notification_provider,
+                usage_provider   # ChangeNotifiers
   screens/      splash, login, register, forgot_password, main_shell, home,
                 recipe_detail, favorites, saved, profile, edit_profile,
                 avatar_crop (circular pan/zoom cropper),
                 change_password, delete_account, history (Usage History),
+                usage (Credit Usage: token totals + breakdown),
                 search, category_results, ai_hub (Generate|Chat)
 test/           widget_test, recipe_detail_test, auth_provider_google_test,
                 gemini_direct_service_test, ai_hub_screen_test, markdown_text_test,
@@ -72,9 +77,10 @@ test/           widget_test, recipe_detail_test, auth_provider_google_test,
                 notification_provider_test, validators_password_test,
                 desi_recipes_test, meal_db_service_test, search_test,
                 category_results_test, generation_entry_test,
+                usage_tracking_test,   # token parsing/aggregation + service→sink seam
                 ui_polish_test   # nav position/labels, buttons, fields, tap + heart
                                  # animation, hero-tag contract, avatar provider
-                                 # caching, overflow, type scale
+                                 # caching, overflow, type scale, scroll physics
 (root)          env.json (git-ignored key, bundled as asset) + env.example.json,
                 firestore.rules, firestore.indexes.json, firebase.json,
                 .vscode/launch.json (AI-enabled run configs)
@@ -118,7 +124,7 @@ A presentation-only pass — **no architecture, repository, or Firebase/Gemini l
 - **New floating bottom nav** (`app_bottom_nav.dart`): pill-shaped and inset from the edges, **frosted** (translucent surface over a `BackdropFilter` blur — an opaque slab floating over a scrolling list reads as a rendering bug), with a **single sliding pill** indicator (`AnimatedAlign`) instead of per-tab backgrounds, outline→filled icon swaps, and the gradient-circle AI action. **Only the selected tab shows its label** (it expands downward via `AnimatedSize`) — that is what lets five destinations fit a 320dp phone; an earlier horizontal expansion overflowed by 15px.
   - ⚠️ **The bar's root must not be a widget that expands vertically.** `Scaffold.bottomNavigationBar` passes *loose* vertical constraints, so a `Center` (the original root, added to cap width on tablets) grew to the full height and floated the bar into the middle of the screen. It is now `Column(mainAxisSize: MainAxisSize.min)` + an `Align` for horizontal centering only. Pinned by the "sits at the bottom of the Scaffold" test. `MainShell` sets **`extendBody: true`** so content scrolls *under* it — which is exactly why `navBarClearance` padding is mandatory on tab scrollables.
 - **Depth pass** — `AppColors.backgroundGradient` (a very subtle top-down warm wash) is applied once in `MainShell` so every tab shares it; the AI hero card gained a 3-stop gradient, translucent depth "orbs", and a lit sparkle badge; recipe cards gained a hairline border and always-on image scrim.
-- **App-wide bouncing scroll** via one `scrollBehavior` on `MaterialApp` (previously 24 of 27 scrollables specified nothing).
+- **App-wide bouncing scroll** via one `scrollBehavior` on `MaterialApp` (previously 24 of 27 scrollables specified nothing). ⚠️ Home was the one screen that kept its own `physics:` and so **lost the bounce entirely** — fixed, and now pinned by the `lib/`-walking test described in golden rule 7.
 - **Buttons/fields rebuilt**: `PrimaryButton` gained variants (primary/outlined/danger), an icon slot, a real disabled state, and press-scale + ripple; `AppTextField` gained focus-reactive icons, autofill hints, submit callbacks, and self-owned `FocusNode` lifecycle.
 - **Usage History (new feature, M-extra)** — `screens/history_screen.dart` + `models/generation_entry.dart` + `RecipeRepository.getGenerationHistory/deleteSavedRecipe` + `RecipeProvider.loadHistory/deleteHistoryEntry`. Rows group by day (Today/Yesterday/date), show the **prompt** that produced the recipe, relative time, and a Saved/Generated status pill; tap reopens, swipe deletes (with confirm). `saveRecipe` now records `prompt` + `status`, defaulting the prompt to `RecipeProvider.lastPrompt` so existing callers didn't change.
 - **Saved tab upgraded** with search, a 4-way sort sheet, long-press delete (optimistic, reverts on failure), and favoriting from the grid.
@@ -176,6 +182,15 @@ Favoriting from Home made the profile picture visibly flicker. Two independent c
 - ✅ **Push notifications (FCM) — receive-only** (`firebase_messaging ^16.4.3`). Clean seam per the app's architecture: `services/notification_service.dart` (thin, lazy `FirebaseMessaging.instance` — `requestPermission` / `getToken` / `onMessage` / `onMessageOpenedApp` / `getInitialMessage`, plus a static `toAppNotification(RemoteMessage)` mapper) → `providers/notification_provider.dart` (`ChangeNotifier`, wired into the `app.dart` MultiProvider; **construction is Firebase-free**, `init()` is called after the first frame by `MainShell` so unit tests stay safe — requests permission, resolves/logs the FCM token, listens to foreground + tap-to-open streams, accumulates `AppNotification`s newest-first, exposes `unreadCount`/`hasUnread`, `markRead(key)` / `markAllRead()` / `remove(key)` / `clear()` / `refresh()`; never throws to the UI) → `models/app_notification.dart` (plain, Firebase-free: title/body/receivedAt/read + `toJson`/`fromJson` and a `dedupeKey`). **UI:** the Home header **bell** shows a live unread **badge** (`_notificationBell` reads `NotificationProvider.unreadCount`) and on tap opens a branded **notifications inbox bottom sheet** (`_NotificationInboxSheet` in `home_screen.dart`) — title/body/relative-time rows (unread ones tinted + trailing red dot), **tap a row to mark just that one read**, **swipe end-to-start to delete one** (`Dismissible` → `remove`), and a **⋯ menu** with *Mark all read* / *Clear all*, plus a branded empty state; design tokens only. **Background/terminated** messages handled by a top-level `@pragma('vm:entry-point')` `_firebaseMessagingBackgroundHandler` registered via `FirebaseMessaging.onBackgroundMessage(...)` in `main.dart` (after `Firebase.initializeApp`, before `runApp`; logs the message and appends it to the store — non-fatal; the OS renders the tray notification). **Android manifest:** added a default FCM notification-channel `meta-data` (`com.google.firebase.messaging.default_notification_channel_id` → `@string/default_notification_channel_id`, id `recipe_default_channel` in new `res/values/strings.xml`); `POST_NOTIFICATIONS` (Android 13+) is contributed by the plugin manifest and requested at runtime via `requestPermission()`. Test: `test/notification_provider_test.dart` (accumulate/dedupe/markRead/markAllRead/remove/clear/refresh/persistence/pruning + mapping, no Firebase; uses `SharedPreferences.setMockInitialValues`). **⚠️ OWNER:** notifications are **SENT for free from the Firebase console → Cloud Messaging (Notifications composer)** — "Send test message" to a device's FCM token (printed to logcat as `FCM token: …` on launch), or Create/Send a campaign to a token/topic. **No Blaze/server needed** (app only receives). **Test on a real device** — emulators often lack Play Services and won't receive FCM. Note the project has **two** registered Android apps (`com.example.ai_recipe_generator` = the one built, and an unused `com.urooj.ai_recipe_generator`); a campaign aimed at the wrong one silently delivers nothing, so prefer token-targeted "Send test message". Harmless on-device log noise: `GoogleApiManager` / `Phenotype` / `FlagStore` / `providerinstaller` `DEVELOPER_ERROR` lines are Play-Services internals, unrelated to FCM — if the `FCM token:` line prints, delivery works.
   - **Inbox persistence + housekeeping (2026-07-29):** the inbox survives restarts. `services/notification_store.dart` = a static, Firebase-free seam over **`shared_preferences ^2.5.5`** (JSON list under key `notifications_inbox`, `maxStored` 50, every method best-effort/never throws). Static by necessity: the FCM background isolate has no access to the provider graph, so `_firebaseMessagingBackgroundHandler` calls `NotificationStore.append` directly — that's how a notification received while the app is closed reaches the inbox even if the user never taps it. `load()` calls `prefs.reload()` first because SharedPreferences caches per-isolate and the main isolate would otherwise never see background-isolate writes. `MainShell` is a `WidgetsBindingObserver` and calls `NotificationProvider.refresh()` on `AppLifecycleState.resumed` to merge those in. **De-dupe is by `AppNotification.dedupeKey`** (the FCM id, or `title|body` when FCM supplies no `messageId`) — keying on the raw id was a real bug: id-less entries were treated as new on every resume, so the inbox grew a copy per resume and read ones came back unread. Tradeoff: two id-less notifications with identical title+body collapse into one. **Retention:** on `init()`, read notifications older than `NotificationProvider.readRetention` (7 days) are pruned; **unread are never auto-pruned** (silently dropping something unseen is worse than a long list).
 
+- ✅ **Credit Usage — Gemini token tracking (2026-08-04, device-verified).** Records what every AI call cost and shows the user their totals. Profile → Activity → **Credit Usage** (`AppRoutes.usage`). Screen leads with total tokens, then Input/Output/Requests tiles, a per-feature breakdown, and the individual calls newest-first; toolbar has a clear-log action.
+  - ⚠️ **Token cost does NOT flow through `AiService`.** Every method there returns `Future<String>` (raw model text), and threading a `(text, usage)` pair through service → repository → provider → UI would churn four layers to carry a number the UI reads separately anyway. Instead `GeminiDirectService` takes an optional **`UsageSink`** (`services/usage_sink.dart`) and reports `usageMetadata` after each **successful** response; **`UsageRepository` implements that sink** and persists to `users/{uid}/usage`. Chat/recipe call paths keep their shapes, so the D7 Cloud-Functions swap still touches only `app/app.dart` — that impl can report through the same sink or leave it null (the server would own accounting).
+  - ⚠️ **The uid is a lazy callback**, not a captured value: `UsageRepository(firestoreService, currentUid: () => authService.currentUser?.uid)`. No auth transition can leave it pointed at a stale user; `null` means "signed out, drop the record".
+  - ⚠️ **`record()` is fire-and-forget and swallows everything** — a failed bookkeeping write must never turn a good AI reply into a user-visible error. That is also why it fails *silently*: `kDebugMode` `debugPrint` lines are the only way to tell a real failure from "nothing to record". Keep them.
+  - Blocked/malformed responses are **never counted** (they throw before the record call), even though Gemini may still have billed. `thoughtsTokenCount` folds into output, since thinking models bill reasoning separately.
+  - `UsageProvider` only **reads**; recording happens entirely on the write path, so an AI call costs zero rebuilds. Sign-out calls `reset()` so the next user never sees the previous one's numbers.
+  - **No Firestore rules change was needed** — the recursive `match /{document=**}` under `/users/{uid}` already covers the new subcollection. `UserRepository.deleteUserData` now drains `usage` too, so account deletion doesn't strand orphans.
+  - Shows **tokens, not currency** — the app bills nobody, and pricing a free-tier number would be inventing a figure. Test: `test/usage_tracking_test.dart` (12 tests; note they use a **mocked** Gemini response, so they never proved the live API returns `usageMetadata` — the device run did).
+
 ## Firebase console state
 - Project: `ai-recipe-generator-db27c` (treat as **dev**; prod not created yet).
 - ✅ Email/Password auth enabled (the earlier `CONFIGURATION_NOT_FOUND` was this being off).
@@ -193,8 +208,11 @@ Favoriting from Home made the profile picture visibly flicker. Two independent c
 4. AI gating for unverified emails? 5. Nutrition accuracy (AI estimate vs. API)? 6. AI rate-limit numbers.
 
 ## Git / workflow
-- Working branch: **`refactor/foundation`**. **Nothing committed yet** this whole effort (user hasn't asked to commit).
+- Working branch: **`refactor/foundation`**. **Committed + pushed 2026-08-04** — 7 commits covering the whole effort (fonts/tokens → rebrand+widgets → screen polish → avatar crop + Usage History → Credit Usage → tests + Home bounce fix → debug cleanup). **PR #1 is open against `main`** and not yet merged.
+- ⚠️ **The GitHub repo moved**: `UroojAsad/…` → **`UroojShehzadi302/AI-Recipe-Generator-Mobile-App`**. Pushes still work via GitHub's redirect, but the local `origin` URL is still the old one — the owner should run `git remote set-url origin https://github.com/UroojShehzadi302/AI-Recipe-Generator-Mobile-App.git` before the redirect stops.
+- Two commits deliberately mix concerns because the files were rewritten wholesale and the hunks weren't separable: Credit Usage's strings landed in the rebrand commit, and Home's scroll-physics fix landed in the polish commit (its guard test is in the last commit).
 - Don't commit unless asked. When committing, end messages with the Co-Authored-By line.
+- `git commit -m` with a PowerShell here-string does **not** parse on this setup — write the message to a file and use `git commit -F <file>`.
 
 ## Running & testing
 - Run: plain `flutter run` (or the IDE ▶ button) — **the flag is no longer needed**. `AiConfig.load()` reads the git-ignored `env.json` **bundled as an asset** at runtime (see `pubspec.yaml assets`), so AI works with any launch method as long as `env.json` exists locally with a valid key. (`--dart-define-from-file=env.json` still works as a fallback; the `.vscode/launch.json` config keeps it too.) If `env.json` is missing/keyless, AI degrades to "coming soon". Needs an Android device/emulator; internet for Firebase + TheMealDB images + Gemini. **Editing `env.json` requires a full stop+run** (assets are bundled at build, not hot-reloaded).
@@ -206,7 +224,7 @@ Favoriting from Home made the profile picture visibly flicker. Two independent c
 The code stack is complete (`services/auth_service.dart` `signInWithGoogle` + `kGoogleServerClientId`, `repositories/auth_repository.dart`, `providers/auth_provider.dart`, Login/Register handlers navigate on success) AND the owner has completed the console side: Google enabled, debug SHA-1 added, and the **new `google-services.json` (with `oauth_client` entries) is in `android/app/`**. Should now work on-device — **owner to smoke-test the button and confirm** (ask for the exact on-screen/console text if it errors). Cancellation returns `null` from the repo → provider stays idle, no error snackbar.
 
 ## Next unblocked work
-Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**, plus the **2026-07-30 security hardening pass** (see Security posture above) and the **2026-08-04 UI/UX polish + CookMate AI rebrand** (see the polish / animation / avatar-crop sections above). `flutter analyze` = 0 (3 accepted hints), `flutter test` = **122 pass**, `flutter build apk --release` succeeds with R8 (56.1 MB).
+Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5 Home (now live), M6/M9 AI, M7 Detail, M8 Favorites/Saved, M10 Search & Categories, plus responsive UI + shimmer loading and **push notifications (device-verified end-to-end on 2026-07-29)** are all **done**, plus the **2026-07-30 security hardening pass** (see Security posture above), the **2026-08-04 UI/UX polish + CookMate AI rebrand** (see the polish / animation / avatar-crop sections above), and **Credit Usage token tracking (device-verified 2026-08-04)**. `flutter analyze` = 0 (3 accepted hints), `flutter test` = **136 pass**, `flutter build apk --release` succeeds with R8 (56.1 MB). All of it is **committed and pushed**; PR #1 is open against `main`.
 
 **Owner should device-verify the polish pass** (none of this is testable from the assistant's side — several of these were reported by the user *after* tests + release build passed, which is exactly why they need eyes on a device):
 - The floating nav bar on a small phone (320–360dp wide) and in landscape; that it sits at the **bottom**, and that no tab's last list item hides behind it.
@@ -215,6 +233,8 @@ Foundation, M1, M4 (Google Sign-In console now done — owner to smoke-test), M5
 - Tap hearts repeatedly on Home: the heart should be **red for the whole pop**, and the profile picture in the header must **not** flicker.
 - Usage History: generate a recipe → save → Profile → Usage History → tap to reopen, swipe to delete.
 - Edit Profile → pick a **tall/portrait** photo → the crop screen should let you position the circle, and the saved avatar should fill it with no black bars.
+- ✅ ~~Credit Usage records tokens~~ **DONE 2026-08-04** — chat → Profile → Credit Usage shows real numbers, confirming `gemini-flash-latest` returns `usageMetadata` on the free tier. The debug trace panel added to diagnose this has since been removed; the `kDebugMode` `debugPrint` lines stay.
+- **Still unverified:** Home's restored bounce (the `physics:` fix landed after the last device pass), and the Credit Usage screen *after* the debug panel was stripped out.
 
 Remaining:
 
