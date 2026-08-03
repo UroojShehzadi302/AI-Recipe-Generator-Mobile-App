@@ -56,9 +56,9 @@ class MarkdownText extends StatelessWidget {
       if (heading != null) {
         final int level = heading.group(1)!.length;
         final TextStyle style = level == 1
-            ? base.copyWith(fontSize: 19, fontWeight: FontWeight.bold)
+            ? base.copyWith(fontSize: 18, fontWeight: FontWeight.w700)
             : level == 2
-                ? base.copyWith(fontSize: 17, fontWeight: FontWeight.w600)
+                ? base.copyWith(fontSize: 16, fontWeight: FontWeight.w600)
                 : base.copyWith(fontWeight: FontWeight.w600);
         blocks.add(_paragraph(heading.group(2)!, style));
         continue;
