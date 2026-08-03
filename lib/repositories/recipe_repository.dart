@@ -23,6 +23,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/constants/desi_recipes.dart';
 import '../core/error/error_mapper.dart';
 import '../core/error/failure.dart';
+import '../models/generation_entry.dart';
 import '../models/recipe_model.dart';
 import '../services/ai_service.dart';
 import '../services/firestore_service.dart';
@@ -415,19 +416,71 @@ class RecipeRepository {
   /// Stored as an embedded snapshot under a deterministic id so re-saving the
   /// same recipe overwrites rather than duplicates. Surfaces a
   /// [FirestoreFailure] on error.
-  Future<void> saveRecipe(String uid, Recipe recipe) async {
+  ///
+  /// [prompt] is the request that produced the recipe. It is recorded so the
+  /// Usage History screen can show *what the user asked for*, not just what
+  /// came back — the prompt is the part they recognise. Passing null leaves any
+  /// previously stored prompt untouched (the write is a merge).
+  Future<void> saveRecipe(String uid, Recipe recipe, {String? prompt}) async {
     try {
       final String id = favoriteDocId(recipe);
+      final Map<String, dynamic> data = <String, dynamic>{
+        'genId': id,
+        'recipe': recipe.toJson(),
+        'sourceType': recipe.sourceType,
+        'status': 'saved',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+      if (prompt != null && prompt.trim().isNotEmpty) {
+        data['prompt'] = prompt.trim();
+      }
       await _firestore.setDoc(
         '${_generatedPath(uid)}/$id',
-        <String, dynamic>{
-          'genId': id,
-          'recipe': recipe.toJson(),
-          'sourceType': recipe.sourceType,
-          'createdAt': FieldValue.serverTimestamp(),
-        },
+        data,
         merge: true,
       );
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw FirestoreFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Removes a kept recipe from `users/{uid}/generatedRecipes`.
+  ///
+  /// [genId] is the deterministic id from [favoriteDocId]. Deleting also
+  /// removes the matching Usage History row, which is intended: history lists
+  /// generations the user still has, so an unsaved recipe shouldn't linger.
+  Future<void> deleteSavedRecipe(String uid, String genId) async {
+    try {
+      await _firestore.deleteDoc('${_generatedPath(uid)}/$genId');
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw FirestoreFailure(ErrorMapper.generic(e));
+    }
+  }
+
+  /// Reads [uid]'s AI generation history, newest first.
+  ///
+  /// Backs the Usage History screen. Sorting happens client-side rather than
+  /// via `orderBy` so the read needs no composite index and still works for
+  /// documents whose server timestamp hasn't resolved yet.
+  Future<List<GenerationEntry>> getGenerationHistory(String uid) async {
+    try {
+      final List<Map<String, dynamic>> docs =
+          await _firestore.getCollection(_generatedPath(uid));
+
+      final List<GenerationEntry> entries = <GenerationEntry>[];
+      for (final Map<String, dynamic> doc in docs) {
+        final GenerationEntry? entry = GenerationEntry.fromMap(doc);
+        if (entry != null) entries.add(entry);
+      }
+      entries.sort(
+        (GenerationEntry a, GenerationEntry b) =>
+            b.createdAt.compareTo(a.createdAt),
+      );
+      return entries;
     } on Failure {
       rethrow;
     } catch (e) {

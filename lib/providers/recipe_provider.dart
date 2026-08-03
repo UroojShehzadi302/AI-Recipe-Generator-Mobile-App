@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/constants/sample_recipes.dart';
 import '../core/error/failure.dart';
+import '../models/generation_entry.dart';
 import '../models/recipe_model.dart';
 import '../repositories/recipe_repository.dart';
 
@@ -178,12 +179,17 @@ class RecipeProvider extends ChangeNotifier {
   LoadStatus _genStatus = LoadStatus.idle;
   Recipe? _generated;
   String? _genError;
+  String? _lastPrompt;
 
   /// Status of the last generation attempt.
   LoadStatus get genStatus => _genStatus;
 
   /// The most recently generated recipe, or `null`.
   Recipe? get generated => _generated;
+
+  /// The prompt behind [generated], or `null`. Recorded so saving a recipe can
+  /// store what the user actually asked for (shown in Usage History).
+  String? get lastPrompt => _lastPrompt;
 
   /// User-friendly message for the last failed generation, or `null`.
   String? get genError => _genError;
@@ -202,6 +208,7 @@ class RecipeProvider extends ChangeNotifier {
     try {
       final Recipe recipe = await _repository.generateRecipe(prompt);
       _generated = recipe;
+      _lastPrompt = prompt.trim();
       _genStatus = LoadStatus.loaded;
       notifyListeners();
       return recipe;
@@ -294,10 +301,19 @@ class RecipeProvider extends ChangeNotifier {
 
   /// Saves [recipe] to [uid]'s kept collection and updates local state.
   ///
+  /// [prompt] defaults to the request that produced the currently-generated
+  /// recipe, so the Usage History row shows what the user actually asked for
+  /// without every caller having to thread it through.
+  ///
   /// Returns `true` on success. Never throws; sets [savedError] on failure.
-  Future<bool> saveRecipe(String uid, Recipe recipe) async {
+  Future<bool> saveRecipe(String uid, Recipe recipe, {String? prompt}) async {
     try {
-      await _repository.saveRecipe(uid, recipe);
+      final String? effectivePrompt = prompt ??
+          (_generated != null && _sameRecipe(_generated!, recipe)
+              ? _lastPrompt
+              : null);
+
+      await _repository.saveRecipe(uid, recipe, prompt: effectivePrompt);
       if (!_saved.any((Recipe r) => _sameRecipe(r, recipe))) {
         _saved = <Recipe>[recipe, ..._saved];
       }
@@ -326,6 +342,111 @@ class RecipeProvider extends ChangeNotifier {
       _savedError = _genericError;
     }
     notifyListeners();
+  }
+
+  /// Removes [recipe] from [uid]'s saved collection and local state.
+  ///
+  /// Optimistic: the row disappears immediately and is restored if the write
+  /// fails, so a delete never feels laggy but also never lies about the result.
+  /// Returns `true` on success. Never throws.
+  Future<bool> deleteSaved(String uid, Recipe recipe) async {
+    final List<Recipe> previous = _saved;
+    _saved = _saved
+        .where((Recipe r) => !_sameRecipe(r, recipe))
+        .toList(growable: false);
+    notifyListeners();
+
+    try {
+      await _repository.deleteSavedRecipe(
+        uid,
+        _repository.favoriteDocId(recipe),
+      );
+      // History lists the same documents, so drop the matching row too rather
+      // than leaving a stale entry that reopens a deleted recipe.
+      _history = _history
+          .where((GenerationEntry e) => !_sameRecipe(e.recipe, recipe))
+          .toList(growable: false);
+      _savedError = null;
+      notifyListeners();
+      return true;
+    } on Failure catch (failure) {
+      _saved = previous;
+      _savedError = failure.message;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      _saved = previous;
+      _savedError = _genericError;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Usage history (AI generations).
+  // ---------------------------------------------------------------------------
+
+  LoadStatus _historyStatus = LoadStatus.idle;
+  List<GenerationEntry> _history = const <GenerationEntry>[];
+  String? _historyError;
+
+  /// Status of the last [loadHistory] call.
+  LoadStatus get historyStatus => _historyStatus;
+
+  /// The user's AI generation history, newest first.
+  List<GenerationEntry> get history => _history;
+
+  /// User-friendly message for the last failed history load, or `null`.
+  String? get historyError => _historyError;
+
+  /// Loads [uid]'s generation history. Never throws; sets [historyError].
+  Future<void> loadHistory(String uid) async {
+    _historyStatus = LoadStatus.loading;
+    _historyError = null;
+    notifyListeners();
+
+    try {
+      _history = await _repository.getGenerationHistory(uid);
+      _historyStatus = LoadStatus.loaded;
+    } on Failure catch (failure) {
+      _historyError = failure.message;
+      _historyStatus = LoadStatus.error;
+    } catch (_) {
+      _historyError = _genericError;
+      _historyStatus = LoadStatus.error;
+    }
+    notifyListeners();
+  }
+
+  /// Deletes one history entry (and the saved recipe it refers to).
+  ///
+  /// Returns `true` on success. Never throws.
+  Future<bool> deleteHistoryEntry(String uid, GenerationEntry entry) async {
+    final List<GenerationEntry> previous = _history;
+    _history = _history
+        .where((GenerationEntry e) => e.id != entry.id)
+        .toList(growable: false);
+    notifyListeners();
+
+    try {
+      await _repository.deleteSavedRecipe(uid, entry.id);
+      _saved = _saved
+          .where((Recipe r) => !_sameRecipe(r, entry.recipe))
+          .toList(growable: false);
+      _historyError = null;
+      notifyListeners();
+      return true;
+    } on Failure catch (failure) {
+      _history = previous;
+      _historyError = failure.message;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      _history = previous;
+      _historyError = _genericError;
+      notifyListeners();
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------------
