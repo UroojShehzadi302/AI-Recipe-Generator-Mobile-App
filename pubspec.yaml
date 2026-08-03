@@ -1,5 +1,5 @@
 name: ai_recipe_generator
-description: "AI Recipe Generator using Flutter, Firebase and Gemini"
+description: "CookMate AI — your smart AI cooking companion, built with Flutter, Firebase and Gemini."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -62,18 +62,29 @@ flutter:
     - assets/icons/
     - env.json
 
-  # Poppins bundled locally (weights 400/500/600/700) to remove the
-  # google_fonts runtime network fetch — correct typography offline and
-  # at first paint. Family name 'Poppins' is referenced by AppTextStyles
-  # and the ThemeData fontFamily.
+  # Fonts are bundled locally (no google_fonts runtime fetch) so typography is
+  # correct offline and at first paint. Both are SIL OFL 1.1 — free for
+  # commercial use; the license files ship alongside them in assets/fonts/.
+  #
+  # Pairing: Fraunces (a warm old-style serif) carries headings and brand
+  # moments; Inter carries everything else. Referenced via
+  # AppTextStyles.displayFamily / .fontFamily — never hardcode these names.
+  #
+  # Fraunces is a VARIABLE font: one file covers the whole weight range, and
+  # Flutter maps `fontWeight` onto its `wght` axis. Listing it once with no
+  # `weight:` key is deliberate — adding per-weight entries for the same file
+  # would make Flutter synthesize weights instead of using the real axis.
   fonts:
-    - family: Poppins
+    - family: Fraunces
       fonts:
-        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Fraunces-Variable.ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Poppins-Medium.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Poppins-SemiBold.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/Poppins-Bold.ttf
+        - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
