@@ -5,6 +5,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
+import '../core/widgets/favorite_button.dart';
 import '../core/widgets/primary_button.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
@@ -19,7 +20,18 @@ class RecipeDetailScreen extends StatefulWidget {
   /// The recipe to display.
   final Recipe recipe;
 
-  const RecipeDetailScreen({super.key, required this.recipe});
+  /// Optional [Hero] tag matching the card that opened this screen, so the
+  /// card's photo flies into the header instead of the page simply sliding in.
+  ///
+  /// Null when there is no originating card (e.g. a freshly generated recipe),
+  /// in which case the header image renders directly with no hero.
+  final String? heroTag;
+
+  const RecipeDetailScreen({
+    super.key,
+    required this.recipe,
+    this.heroTag,
+  });
 
   @override
   State<RecipeDetailScreen> createState() => _RecipeDetailScreenState();
@@ -93,7 +105,18 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          _buildHeroImage(),
+          // Wrapped only when a tag was supplied — a Hero with no matching
+          // source on the previous route adds cost for no animation.
+          if (widget.heroTag != null)
+            Hero(
+              tag: widget.heroTag!,
+              // A plain image mid-flight: the card's rounded clip and the
+              // header's square edges would otherwise fight during the tween.
+              flightShuttleBuilder: (_, _, _, _, _) => _buildHeroImage(),
+              child: _buildHeroImage(),
+            )
+          else
+            _buildHeroImage(),
           // Top overlay controls.
           Positioned(
             top: MediaQuery.of(context).padding.top + AppDimensions.spaceS,
@@ -106,11 +129,21 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   icon: Icons.arrow_back_ios_new,
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
-                _CircleIconButton(
-                  icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-                  iconColor:
-                      isFavorite ? AppColors.error : AppColors.textPrimary,
-                  onPressed: _toggleFavorite,
+                // Same pop-and-burst as the cards, in the header's circular
+                // chrome — favoriting should feel identical wherever it lives.
+                Material(
+                  color: AppColors.surface.withValues(alpha: 0.85),
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppDimensions.spaceS),
+                    child: FavoriteButton(
+                      isFavorite: isFavorite,
+                      onPressed: _toggleFavorite,
+                      size: AppDimensions.iconLg,
+                      padded: false,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -455,12 +488,10 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 class _CircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
-  final Color iconColor;
 
   const _CircleIconButton({
     required this.icon,
     required this.onPressed,
-    this.iconColor = AppColors.textPrimary,
   });
 
   @override
@@ -473,7 +504,7 @@ class _CircleIconButton extends StatelessWidget {
         onTap: onPressed,
         child: Padding(
           padding: const EdgeInsets.all(AppDimensions.spaceS),
-          child: Icon(icon, size: 20, color: iconColor),
+          child: Icon(icon, size: 20, color: AppColors.textPrimary),
         ),
       ),
     );

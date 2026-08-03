@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/constants/app_strings.dart';
+import '../core/theme/app_animations.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_dimensions.dart';
+import '../core/theme/app_text_styles.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/empty_state.dart';
 import '../core/widgets/recipe_card.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
-import '../routes/app_routes.dart';
+import 'recipe_detail_screen.dart';
 
 /// Favorites tab — recipes the user has bookmarked.
 ///
@@ -35,6 +39,24 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     }
   }
 
+  /// Namespaces this screen's hero tags. The same recipe can be on screen in
+  /// another list elsewhere in the app, and duplicate tags throw.
+  static const String _heroPrefix = 'fav-';
+
+  /// Opens [recipe], handing the detail screen the matching hero tag so the
+  /// card's photo flies into its header.
+  void _open(Recipe recipe) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => RecipeDetailScreen(
+          recipe: recipe,
+          heroTag: RecipeCard.heroTagFor(recipe, prefix: _heroPrefix),
+        ),
+      ),
+    );
+  }
+
   Future<void> _unfavorite(Recipe recipe) async {
     final uid = context.read<AuthProvider>().uid;
     if (uid == null) return;
@@ -46,51 +68,82 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final favorites = context.watch<RecipeProvider>().favorites;
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Favorites',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: favorites.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.favorite_border,
-                      title: 'No favorites yet',
-                      message: 'Tap the heart on any recipe to save it here.',
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      gridDelegate:
-                          SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: context.recipeGridColumns,
-                        crossAxisSpacing: 14,
-                        mainAxisSpacing: 14,
-                        childAspectRatio: 0.74,
-                      ),
-                      itemCount: favorites.length,
-                      itemBuilder: (context, i) => RecipeCard(
-                        recipe: favorites[i],
-                        width: double.infinity,
-                        isFavorite: true,
-                        onFavorite: () => _unfavorite(favorites[i]),
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.recipeDetail,
-                          arguments: favorites[i],
-                        ),
+      bottom: false,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: AppDimensions.maxContentWidth,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.pagePadding,
+                  AppDimensions.spaceL,
+                  context.pagePadding,
+                  AppDimensions.spaceL,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        AppStrings.tabFavorites,
+                        style: AppTextStyles.screenTitle,
                       ),
                     ),
-            ),
-          ],
+                    if (favorites.isNotEmpty)
+                      Text(
+                        '${favorites.length} '
+                        '${favorites.length == 1 ? "recipe" : "recipes"}',
+                        style: AppTextStyles.label,
+                      ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: favorites.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.favorite_border_rounded,
+                        title: 'No favorites yet',
+                        message:
+                            'Tap the heart on any recipe to save it here.',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () async => _load(),
+                        color: AppColors.primary,
+                        child: GridView.builder(
+                          padding: EdgeInsets.fromLTRB(
+                            context.pagePadding,
+                            0,
+                            context.pagePadding,
+                            AppDimensions.navBarClearance,
+                          ),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: context.recipeGridColumns,
+                            crossAxisSpacing: AppDimensions.spaceM,
+                            mainAxisSpacing: AppDimensions.spaceM,
+                            childAspectRatio: 0.72,
+                          ),
+                          itemCount: favorites.length,
+                          itemBuilder: (context, i) => FadeSlideIn(
+                            delay: AppAnimations.staggerFor(i),
+                            child: RecipeCard(
+                              recipe: favorites[i],
+                              width: double.infinity,
+                              heroPrefix: _heroPrefix,
+                              heroEnabled: true,
+                              isFavorite: true,
+                              onFavorite: () => _unfavorite(favorites[i]),
+                              onTap: () => _open(favorites[i]),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

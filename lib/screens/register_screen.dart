@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_assets.dart';
+import '../core/constants/app_strings.dart';
+import '../core/theme/app_animations.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
+import '../core/theme/app_shadows.dart';
+import '../core/theme/app_text_styles.dart';
 import '../core/utils/validators.dart';
 import '../core/widgets/app_text_field.dart';
 import '../core/widgets/google_button.dart';
@@ -12,6 +16,11 @@ import '../core/widgets/primary_button.dart';
 import '../providers/auth_provider.dart';
 import '../routes/app_routes.dart';
 
+/// Account creation screen for CookMate AI.
+///
+/// Mirrors [LoginScreen]'s structure — brand mark, heading, then a single white
+/// form card — so the two read as one flow. Fields chain focus in order, and
+/// the final field submits.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -26,12 +35,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final passwordController = TextEditingController();
   final confirmController = TextEditingController();
 
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+  final _confirmFocus = FocusNode();
+
   @override
   void dispose() {
     nameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     confirmController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
   }
 
@@ -77,184 +93,205 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.only(
-                left: 22,
-                right: 22,
-                top: 12,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: AppDimensions.maxContentWidth,
+            ),
+            child: SingleChildScrollView(
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                AppDimensions.spaceXl,
+                AppDimensions.spaceS,
+                AppDimensions.spaceXl,
+                MediaQuery.viewInsetsOf(context).bottom + AppDimensions.spaceXl,
               ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight - 24,
-                    maxWidth: AppDimensions.maxContentWidth,
-                  ),
-                  child: IntrinsicHeight(
-                    child: Form(
-                      key: _formKey,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.primary,
+                        ),
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+
+                    FadeSlideIn(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Back to Login.
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.arrow_back,
-                                  color: AppColors.primary),
-                              onPressed: () => Navigator.pop(context),
+                          ClipRRect(
+                            borderRadius: AppDimensions.brLg,
+                            child: Image.asset(
+                              AppAssets.logo,
+                              height: 64,
+                              width: 64,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                height: 64,
+                                width: 64,
+                                decoration: const BoxDecoration(
+                                  gradient: AppColors.brandGradient,
+                                ),
+                                child: const Icon(
+                                  Icons.restaurant_menu_rounded,
+                                  size: 32,
+                                  color: AppColors.onPrimary,
+                                ),
+                              ),
                             ),
                           ),
-
-                          Image.asset(
-                            AppAssets.logo,
-                            height: 64,
-                            errorBuilder: (_, _, _) => const Icon(
-                              Icons.restaurant_menu,
-                              size: 64,
-                              color: AppColors.primary,
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          const Text(
-                            'Create Account',
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-
-                          const SizedBox(height: 4),
-
+                          const SizedBox(height: AppDimensions.spaceL),
                           Text(
-                            'Join and start cooking with AI',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
-                            ),
+                            AppStrings.createAccount,
+                            style: AppTextStyles.display,
                           ),
-
-                          const SizedBox(height: 16),
-
-                          Card(
-                            elevation: 5,
-                            shadowColor: Colors.black12,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 16,
-                              ),
-                              child: Column(
-                                children: [
-                                  AppTextField(
-                                    controller: nameController,
-                                    label: 'Name',
-                                    icon: Icons.person_outline,
-                                    textInputAction: TextInputAction.next,
-                                    validator: Validators.name,
-                                  ),
-
-                                  const SizedBox(height: 14),
-
-                                  AppTextField(
-                                    controller: emailController,
-                                    label: 'Email',
-                                    icon: Icons.email_outlined,
-                                    keyboardType: TextInputType.emailAddress,
-                                    textInputAction: TextInputAction.next,
-                                    validator: Validators.email,
-                                  ),
-
-                                  const SizedBox(height: 14),
-
-                                  AppTextField(
-                                    controller: passwordController,
-                                    label: 'Password',
-                                    icon: Icons.lock_outline,
-                                    isPassword: true,
-                                    textInputAction: TextInputAction.next,
-                                    validator: Validators.password,
-                                  ),
-
-                                  const SizedBox(height: 14),
-
-                                  AppTextField(
-                                    controller: confirmController,
-                                    label: 'Confirm Password',
-                                    icon: Icons.lock_outline,
-                                    isPassword: true,
-                                    textInputAction: TextInputAction.done,
-                                    validator: (v) =>
-                                        Validators.confirmPassword(
-                                      v,
-                                      passwordController.text,
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 18),
-
-                                  PrimaryButton(
-                                    text: 'SIGN UP',
-                                    isLoading: isLoading,
-                                    onPressed: isLoading ? null : _register,
-                                  ),
-
-                                  const SizedBox(height: 14),
-
-                                  const OrDivider(),
-
-                                  const SizedBox(height: 14),
-
-                                  GoogleButton(
-                                    label: 'Sign up with Google',
-                                    onPressed: isLoading ? null : _googleSignUp,
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        'Already have an account?',
-                                        style: TextStyle(fontSize: 14),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text(
-                                          'Sign In',
-                                          style: TextStyle(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
+                          const SizedBox(height: AppDimensions.spaceXs),
+                          Text(
+                            AppStrings.registerSubtitle,
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.subtitle,
                           ),
                         ],
                       ),
                     ),
-                  ),
+
+                    const SizedBox(height: AppDimensions.spaceXl),
+
+                    FadeSlideIn(
+                      delay: AppAnimations.staggerFor(1),
+                      child: Container(
+                        padding: const EdgeInsets.all(AppDimensions.spaceXl),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: AppDimensions.brXl,
+                          boxShadow: AppShadows.card,
+                        ),
+                        child: Column(
+                          children: [
+                            AppTextField(
+                              controller: nameController,
+                              label: 'Name',
+                              icon: Icons.person_outline_rounded,
+                              textInputAction: TextInputAction.next,
+                              textCapitalization: TextCapitalization.words,
+                              autofillHints: const <String>[
+                                AutofillHints.name,
+                              ],
+                              validator: Validators.name,
+                              onFieldSubmitted: (_) =>
+                                  _emailFocus.requestFocus(),
+                            ),
+
+                            const SizedBox(height: AppDimensions.spaceL),
+
+                            AppTextField(
+                              controller: emailController,
+                              focusNode: _emailFocus,
+                              label: AppStrings.email,
+                              icon: Icons.email_outlined,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const <String>[
+                                AutofillHints.email,
+                              ],
+                              validator: Validators.email,
+                              onFieldSubmitted: (_) =>
+                                  _passwordFocus.requestFocus(),
+                            ),
+
+                            const SizedBox(height: AppDimensions.spaceL),
+
+                            AppTextField(
+                              controller: passwordController,
+                              focusNode: _passwordFocus,
+                              label: AppStrings.password,
+                              icon: Icons.lock_outline_rounded,
+                              isPassword: true,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const <String>[
+                                AutofillHints.newPassword,
+                              ],
+                              validator: Validators.password,
+                              onFieldSubmitted: (_) =>
+                                  _confirmFocus.requestFocus(),
+                            ),
+
+                            const SizedBox(height: AppDimensions.spaceL),
+
+                            AppTextField(
+                              controller: confirmController,
+                              focusNode: _confirmFocus,
+                              label: 'Confirm Password',
+                              icon: Icons.lock_reset_rounded,
+                              isPassword: true,
+                              textInputAction: TextInputAction.done,
+                              validator: (v) => Validators.confirmPassword(
+                                v,
+                                passwordController.text,
+                              ),
+                              onFieldSubmitted: (_) {
+                                if (!isLoading) _register();
+                              },
+                            ),
+
+                            const SizedBox(height: AppDimensions.spaceXl),
+
+                            PrimaryButton(
+                              text: AppStrings.signUp,
+                              isLoading: isLoading,
+                              onPressed: isLoading ? null : _register,
+                            ),
+
+                            const SizedBox(height: AppDimensions.spaceL),
+                            const OrDivider(),
+                            const SizedBox(height: AppDimensions.spaceL),
+
+                            GoogleButton(
+                              label: 'Sign up with Google',
+                              onPressed: isLoading ? null : _googleSignUp,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: AppDimensions.spaceL),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          AppStrings.haveAccount,
+                          style: AppTextStyles.body,
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            AppStrings.signIn,
+                            style: AppTextStyles.body.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );

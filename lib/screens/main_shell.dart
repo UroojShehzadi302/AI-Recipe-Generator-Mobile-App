@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/constants/app_strings.dart';
 import '../core/theme/app_colors.dart';
-import '../core/theme/app_dimensions.dart';
+import '../core/widgets/app_bottom_nav.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
@@ -12,11 +13,11 @@ import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'saved_screen.dart';
 
-/// Hosts the five main tabs behind a custom bottom navigation bar, with the
-/// AI tab visually highlighted as the app's core feature.
+/// Hosts the five main tabs behind the floating [AppBottomNav], with the AI
+/// tab visually emphasized as the app's core feature.
 ///
-/// Tabs other than Home and Profile are placeholders until their feature
-/// milestones (Favorites/Saved M8, AI Generator M6).
+/// Tabs are kept alive by an [IndexedStack] so switching between them never
+/// discards scroll position or reloads data.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -73,122 +74,53 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
-      bottomNavigationBar: _BottomNav(index: _index, onSelect: _select),
-    );
-  }
-}
-
-class _BottomNav extends StatelessWidget {
-  const _BottomNav({required this.index, required this.onSelect});
-
-  final int index;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 16,
-            offset: Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            children: [
-              _item(0, Icons.home_rounded, 'Home'),
-              _item(1, Icons.favorite_border, 'Favorites'),
-              _aiItem(2),
-              _item(3, Icons.bookmark_border, 'Saved'),
-              _item(4, Icons.person_outline, 'Profile'),
-            ],
-          ),
+      // The nav bar floats, so the body runs full-bleed behind it. Scrollable
+      // tab content pads itself by AppDimensions.navBarClearance so the last
+      // item still clears the bar.
+      extendBody: true,
+      // One warm background gradient for every tab, set here rather than in
+      // each screen so they can't drift apart.
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: AppColors.backgroundGradient,
         ),
+        child: IndexedStack(index: _index, children: pages),
+      ),
+      bottomNavigationBar: AppBottomNav(
+        index: _index,
+        onSelect: _select,
+        destinations: _destinations,
       ),
     );
   }
 
-  Widget _item(int i, IconData icon, String label) {
-    final selected = index == i;
-    final color = selected ? AppColors.primary : AppColors.textSecondary;
-    return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        onTap: () => onSelect(i),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Center AI action — always visually emphasized as the core feature.
-  Widget _aiItem(int i) {
-    final selected = index == i;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => onSelect(i),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.primary, AppColors.primaryDark],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(
-                        alpha: selected ? 0.5 : 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.auto_awesome,
-                  color: Colors.white, size: 26),
-            ),
-            const SizedBox(height: 3),
-            const Text(
-              'Ask AI',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  /// The five tabs, in shell order (Home · Favorites · AI · Saved · Profile).
+  static const List<NavDestination> _destinations = <NavDestination>[
+    NavDestination(
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: AppStrings.tabHome,
+    ),
+    NavDestination(
+      icon: Icons.favorite_border_rounded,
+      activeIcon: Icons.favorite_rounded,
+      label: AppStrings.tabFavorites,
+    ),
+    NavDestination(
+      icon: Icons.auto_awesome_outlined,
+      activeIcon: Icons.auto_awesome,
+      label: AppStrings.tabAi,
+      emphasized: true,
+    ),
+    NavDestination(
+      icon: Icons.bookmark_border_rounded,
+      activeIcon: Icons.bookmark_rounded,
+      label: AppStrings.tabSaved,
+    ),
+    NavDestination(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: AppStrings.tabProfile,
+    ),
+  ];
 }

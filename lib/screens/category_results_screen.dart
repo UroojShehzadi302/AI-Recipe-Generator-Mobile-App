@@ -2,16 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_dimensions.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/app_error_view.dart';
 import '../core/widgets/empty_state.dart';
 import '../core/widgets/loading_indicator.dart';
 import '../core/widgets/recipe_card.dart';
+import '../core/widgets/recipe_opening_overlay.dart';
 import '../core/widgets/shimmer_loading.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
-import '../routes/app_routes.dart';
+import 'recipe_detail_screen.dart';
 
 /// Category results — recipes belonging to a single category (M10).
 ///
@@ -43,9 +45,12 @@ class CategoryResultsScreen extends StatefulWidget {
 }
 
 class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
-  /// The `recipeId` currently being resolved to full detail, or `null` when
-  /// idle. Drives the blocking overlay spinner and prevents double-taps.
-  String? _openingId;
+  /// The recipe currently being resolved to full detail, or `null` when idle.
+  ///
+  /// Drives the blocking [RecipeOpeningOverlay] and prevents double-taps. The
+  /// whole [Recipe] is held, not just its id, so the overlay can show the
+  /// card's own photo and title while the fetch is in flight.
+  Recipe? _opening;
 
   @override
   void initState() {
@@ -54,6 +59,19 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
       if (!mounted) return;
       context.read<RecipeProvider>().loadCategory(widget.category);
     });
+  }
+
+  /// Namespaces this screen's hero tags so they can't collide with another
+  /// list showing the same recipe.
+  static const String _heroPrefix = 'cat-';
+
+  void _push(Recipe recipe, String heroTag) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => RecipeDetailScreen(recipe: recipe, heroTag: heroTag),
+      ),
+    );
   }
 
   Future<void> _toggleFavorite(Recipe recipe) async {
@@ -76,30 +94,27 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   /// via a snackbar on failure.
   Future<void> _openRecipe(Recipe recipe) async {
     // A resolve is already in flight — ignore further taps.
-    if (_openingId != null) return;
+    if (_opening != null) return;
+
+    // Built from the CARD's recipe so the flight still matches after the fetch
+    // swaps in the fuller object below.
+    final String heroTag =
+        RecipeCard.heroTagFor(recipe, prefix: _heroPrefix);
 
     final String? id = recipe.recipeId;
     if (id == null || id.isEmpty) {
-      Navigator.pushNamed(
-        context,
-        AppRoutes.recipeDetail,
-        arguments: recipe,
-      );
+      _push(recipe, heroTag);
       return;
     }
 
-    setState(() => _openingId = id);
+    setState(() => _opening = recipe);
     final Recipe? full =
         await context.read<RecipeProvider>().getRecipeDetails(id);
     if (!mounted) return;
-    setState(() => _openingId = null);
+    setState(() => _opening = null);
 
     if (full != null) {
-      Navigator.pushNamed(
-        context,
-        AppRoutes.recipeDetail,
-        arguments: full,
-      );
+      _push(full, heroTag);
     } else {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -121,23 +136,22 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        title: Text(
-          widget.category,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
+        title: Text(widget.category),
       ),
       body: SafeArea(
         top: false,
         child: Stack(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.spaceXl,
+                AppDimensions.spaceL,
+                AppDimensions.spaceXl,
+                0,
+              ),
               child: _body(provider),
             ),
-            if (_openingId != null) _openingOverlay(),
+            if (_opening != null) RecipeOpeningOverlay(recipe: _opening!),
           ],
         ),
       ),
@@ -170,17 +184,19 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   Widget _resultsGrid(RecipeProvider provider) {
     final List<Recipe> recipes = provider.categoryRecipes;
     return GridView.builder(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: AppDimensions.spaceXxl),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: context.recipeGridColumns,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        childAspectRatio: 0.74,
+        crossAxisSpacing: AppDimensions.spaceM,
+        mainAxisSpacing: AppDimensions.spaceM,
+        childAspectRatio: 0.72,
       ),
       itemCount: recipes.length,
       itemBuilder: (context, i) => RecipeCard(
         recipe: recipes[i],
         width: double.infinity,
+        heroPrefix: _heroPrefix,
+        heroEnabled: true,
         isFavorite: provider.isFavorite(recipes[i]),
         onFavorite: () => _toggleFavorite(recipes[i]),
         onTap: () => _openRecipe(recipes[i]),
@@ -188,20 +204,4 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
     );
   }
 
-  /// A subtle translucent scrim + centered spinner shown while a tapped card is
-  /// resolved to full detail. The [ModalBarrier] absorbs input so the grid
-  /// can't be tapped again mid-resolve.
-  Widget _openingOverlay() {
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          ModalBarrier(
-            color: AppColors.textPrimary.withValues(alpha: 0.25),
-            dismissible: false,
-          ),
-          const LoadingIndicator(),
-        ],
-      ),
-    );
-  }
 }

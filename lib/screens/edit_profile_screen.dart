@@ -8,18 +8,23 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
-import '../core/utils/image_source.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/app_text_field.dart';
 import '../core/widgets/primary_button.dart';
+import '../core/widgets/profile_avatar.dart';
 import '../providers/auth_provider.dart';
+import 'avatar_crop_screen.dart';
 
-/// Edit Profile — change display name and upload a new avatar.
+/// Edit Profile — change display name and set a new avatar.
 ///
-/// Name persists to FirebaseAuth + the Firestore `/users/{uid}` document; the
-/// avatar is uploaded to Cloud Storage (`avatars/{uid}.jpg`) and its URL saved
-/// to the same places. All wiring goes through [AuthProvider.updateProfile]
-/// (Widget → Provider → Repository → Service). Never touches Firebase directly.
+/// Name persists to FirebaseAuth + the Firestore `/users/{uid}` document. The
+/// avatar is picked from the gallery, cropped square via [AvatarCropScreen],
+/// then stored as a compressed base64 `data:` URI **inside the same Firestore
+/// document** — deliberately NOT Cloud Storage, which Firebase now gates
+/// behind the paid Blaze plan.
+///
+/// All wiring goes through [AuthProvider.updateProfile] (Widget → Provider →
+/// Repository → Service). Never touches Firebase directly.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -51,17 +56,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickImage() async {
     try {
-      // Downscale hard: the avatar is stored base64 in Firestore, so keep it
-      // small (well under the 1 MB document limit) while staying crisp at
-      // avatar sizes.
+      // Picked at a generous size — the crop screen does the downscaling, and
+      // starting from a larger source keeps the cropped region sharp. Capped
+      // anyway so a 12 MP photo doesn't blow up memory while cropping.
       final XFile? picked = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 400,
-        maxHeight: 400,
-        imageQuality: 70,
+        maxWidth: 1600,
+        maxHeight: 1600,
       );
-      if (picked != null && mounted) {
-        setState(() => _pickedAvatar = File(picked.path));
+      if (picked == null || !mounted) return;
+
+      // Let the user choose WHICH part of the photo becomes the avatar. This
+      // is also what guarantees a square: an uncropped portrait would
+      // letterbox with empty bars inside the circular avatar.
+      final File? cropped = await Navigator.push<File?>(
+        context,
+        MaterialPageRoute<File?>(
+          builder: (_) => AvatarCropScreen(source: File(picked.path)),
+        ),
+      );
+      if (cropped != null && mounted) {
+        setState(() => _pickedAvatar = cropped);
       }
     } catch (_) {
       if (!mounted) return;
@@ -176,23 +191,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       onTap: _saving ? null : _pickImage,
       child: Stack(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.border),
-              boxShadow: AppShadows.card,
-            ),
-            child: CircleAvatar(
+          // A freshly-cropped file isn't a URL yet, so it can't go through
+          // ProfileAvatar — but it is already square, so a plain cover-fit
+          // circle matches exactly how it will look once saved.
+          if (hasPicked)
+            Container(
+              width: 104,
+              height: 104,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border),
+                boxShadow: AppShadows.card,
+              ),
+              child: ClipOval(
+                child: Image.file(
+                  _pickedAvatar!,
+                  width: 104,
+                  height: 104,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            )
+          else
+            ProfileAvatar(
               radius: 52,
-              backgroundColor: AppColors.surface,
-              backgroundImage: hasPicked
-                  ? FileImage(_pickedAvatar!)
-                  : imageProviderFromUrl(photoUrl),
-              child: (hasPicked || hasRemote)
-                  ? null
-                  : const Icon(Icons.person, size: 52, color: AppColors.secondary),
+              imageUrl: hasRemote ? photoUrl : null,
             ),
-          ),
           Positioned(
             right: 0,
             bottom: 0,
