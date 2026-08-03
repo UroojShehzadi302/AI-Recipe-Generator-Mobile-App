@@ -37,39 +37,72 @@ class ProfileAvatar extends StatefulWidget {
 class _ProfileAvatarState extends State<ProfileAvatar> {
   bool _imageFailed = false;
 
+  /// The resolved provider, built ONCE per URL.
+  ///
+  /// Load-bearing: avatars are base64 `data:` URIs, and decoding one produces
+  /// a fresh `Uint8List` every time. Because [MemoryImage] keys its cache on
+  /// that list's identity, resolving on each build made every rebuild a cache
+  /// miss — so the avatar re-decoded and visibly flickered whenever an
+  /// unrelated bit of the screen rebuilt (favoriting a recipe, for instance).
+  ImageProvider<Object>? _provider;
+
+  @override
+  void initState() {
+    super.initState();
+    _provider = imageProviderFromUrl(widget.imageUrl);
+  }
+
   @override
   void didUpdateWidget(covariant ProfileAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Retry loading if the URL changes after a previous failure.
+    // Rebuild the provider (and retry after a failure) only when the URL
+    // genuinely changes.
     if (oldWidget.imageUrl != widget.imageUrl) {
       _imageFailed = false;
+      _provider = imageProviderFromUrl(widget.imageUrl);
     }
   }
 
-  ImageProvider<Object>? get _image =>
-      _imageFailed ? null : imageProviderFromUrl(widget.imageUrl);
+  ImageProvider<Object>? get _image => _imageFailed ? null : _provider;
 
   @override
   Widget build(BuildContext context) {
     final ImageProvider<Object>? image = _image;
+    final double diameter = widget.radius * 2;
+
     return Container(
+      width: diameter,
+      height: diameter,
       decoration: BoxDecoration(
+        color: AppColors.surface,
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.border),
         boxShadow: AppShadows.card,
       ),
-      child: CircleAvatar(
-        radius: widget.radius,
-        backgroundColor: AppColors.surface,
-        backgroundImage: image,
-        onBackgroundImageError: image != null
-            ? (Object error, StackTrace? stackTrace) {
-                if (mounted) {
-                  setState(() => _imageFailed = true);
-                }
-              }
-            : null,
-        child: image == null ? _buildFallback() : null,
+      // ClipOval + BoxFit.cover, rather than CircleAvatar's backgroundImage:
+      // cover guarantees the circle is always FILLED. A non-square source
+      // otherwise leaves empty bars inside the avatar (avatars are cropped
+      // square on the way in now, but remote/Google photos are not ours to
+      // control).
+      child: ClipOval(
+        child: image == null
+            ? Center(child: _buildFallback())
+            : Image(
+                image: image,
+                width: diameter,
+                height: diameter,
+                fit: BoxFit.cover,
+                // Keeps the previous frame on screen while a new one resolves,
+                // instead of blanking to the background colour.
+                gaplessPlayback: true,
+                errorBuilder: (_, _, _) {
+                  // Deferred: setState during build would throw.
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _imageFailed = true);
+                  });
+                  return Center(child: _buildFallback());
+                },
+              ),
       ),
     );
   }
