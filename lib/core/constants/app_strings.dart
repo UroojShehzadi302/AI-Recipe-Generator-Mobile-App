@@ -174,7 +174,7 @@ class AppStrings {
   // block once Crashlytics has been confirmed working end-to-end.
   static const String debugGroup = 'Debug (development only)';
   static const String debugSendTestReport = 'Send test crash report';
-  static const String debugForceCrash = 'Force a crash';
+  static const String debugForceCrash = 'Force a crash (app will close)';
   static const String debugReportSent =
       'Test report sent. Relaunch the app, then check Firebase → Crashlytics.';
 
