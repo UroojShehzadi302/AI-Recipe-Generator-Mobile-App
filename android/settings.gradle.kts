@@ -21,7 +21,11 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "9.0.1" apply false
     // START: FlutterFire Configuration
-    id("com.google.gms.google-services") version("4.3.15") apply false
+    // ⚠️ Must stay ≥ 4.4.1: the Crashlytics plugin below (v3) reads the app id
+    // through an API added in that release, and an older google-services fails
+    // ONLY in a release build — `assembleDebug` succeeds, then
+    // `:app:uploadCrashlyticsMappingFileRelease` cannot be created. Was 4.3.15.
+    id("com.google.gms.google-services") version("4.4.2") apply false
     // END: FlutterFire Configuration
     // Crashlytics (M14). Required, not optional: this app ships with R8
     // (isMinifyEnabled = true), and this plugin is what uploads the obfuscation
