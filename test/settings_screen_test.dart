@@ -19,6 +19,7 @@ import 'package:ai_recipe_generator/services/notification_service.dart';
 import 'package:ai_recipe_generator/services/settings_store.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,6 +58,33 @@ class _FakeNotificationService extends NotificationService {
 
   @override
   Future<RemoteMessage?> getInitialMessage() async => null;
+}
+
+/// Intercepts the `url_launcher` platform channel.
+///
+/// Necessary rather than incidental: left unmocked the channel answers `true`
+/// to everything, so a test would report the browser opened no matter what the
+/// screen did — and the fallback path would never run. Pass `onLaunch: null`
+/// to restore the default.
+void _mockUrlLauncher(
+  WidgetTester tester, {
+  required bool Function(String url)? onLaunch,
+}) {
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    const MethodChannel('plugins.flutter.io/url_launcher'),
+    onLaunch == null
+        ? null
+        : (MethodCall call) async {
+            switch (call.method) {
+              case 'canLaunch':
+                return true;
+              case 'launch':
+                return onLaunch(call.arguments['url'] as String);
+              default:
+                return null;
+            }
+          },
+  );
 }
 
 Widget _wrap(
@@ -220,7 +248,14 @@ void main() {
       expect(find.text(AppStrings.aboutApp), findsOneWidget);
     });
 
-    testWidgets('Privacy Policy opens a dialog showing the URL', (tester) async {
+    testWidgets('Privacy Policy hands the URL to the browser', (tester) async {
+      final List<String> launched = <String>[];
+      _mockUrlLauncher(tester, onLaunch: (String url) {
+        launched.add(url);
+        return true;
+      });
+      addTearDown(() => _mockUrlLauncher(tester, onLaunch: null));
+
       final provider = NotificationProvider(_FakeNotificationService());
       await tester.pumpWidget(_wrap(provider));
       await tester.pumpAndSettle();
@@ -228,9 +263,43 @@ void main() {
       await tester.tap(find.text(AppStrings.privacyPolicy));
       await tester.pumpAndSettle();
 
-      // No url_launcher in this build, so the address is shown to be copied.
+      expect(launched, <String>[AppStrings.privacyPolicyUrl]);
+      // The browser opened, so the copy dialog must NOT also appear.
+      expect(find.text(AppStrings.linkCopy), findsNothing);
+    });
+
+    testWidgets('falls back to the copy dialog when no browser can be opened',
+        (tester) async {
+      // Real cases: a device with no browser, a locked-down work profile, or
+      // Android package visibility hiding every browser. Showing a dead link
+      // would be worse than showing the address, so the user must still be
+      // able to reach the page.
+      _mockUrlLauncher(tester, onLaunch: (_) => false);
+      addTearDown(() => _mockUrlLauncher(tester, onLaunch: null));
+
+      final provider = NotificationProvider(_FakeNotificationService());
+      await tester.pumpWidget(_wrap(provider));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(AppStrings.privacyPolicy));
+      await tester.pumpAndSettle();
+
       expect(find.text(AppStrings.privacyPolicyUrl), findsOneWidget);
       expect(find.text(AppStrings.linkCopy), findsOneWidget);
+    });
+
+    testWidgets('the policy URLs are real and not placeholders', (tester) async {
+      // Guards a specific past failure: these shipped as example.com
+      // placeholders while a doc claimed they were hosted. Play rejects a
+      // listing whose Privacy Policy URL does not resolve, so a placeholder
+      // sneaking back in is a release blocker, not a cosmetic slip.
+      for (final String url in <String>[
+        AppStrings.privacyPolicyUrl,
+        AppStrings.termsUrl,
+      ]) {
+        expect(url, startsWith('https://'));
+        expect(url, isNot(contains('example.com')));
+      }
     });
 
     testWidgets('About opens the shared app dialog', (tester) async {

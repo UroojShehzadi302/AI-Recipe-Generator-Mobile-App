@@ -35,6 +35,11 @@ dependencies:
   # services/crashlytics_crash_reporter.dart imports it — everything else
   # depends on the CrashReporter interface.
   firebase_crashlytics: ^5.0.0
+  # Opens the Privacy Policy / Terms in the device browser from Settings.
+  # Needs a <queries> entry in AndroidManifest.xml — Android 11+ hides other
+  # apps unless you declare the intent, and without it canLaunchUrl returns
+  # false on a device that has a perfectly good browser.
+  url_launcher: ^6.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

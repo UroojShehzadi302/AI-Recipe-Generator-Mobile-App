@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/constants/app_strings.dart';
 import '../core/theme/app_animations.dart';
@@ -156,14 +157,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (picked != null) await provider.setScale(picked);
   }
 
-  /// Presents [url] in a copyable dialog.
+  /// Opens [url] in the device browser, falling back to a copyable dialog.
   ///
-  /// ⚠️ TODO(owner): this app has **no `url_launcher` dependency**, and adding
-  /// one is a call for the owner to make — so we cannot open a browser
-  /// directly. Showing the address with a Copy action is the honest fallback:
-  /// the user can still reach the page, and nothing pretends to be a link that
-  /// does nothing. If `url_launcher` is ever added, replace the body of this
-  /// method with a `launchUrl` call and drop the dialog.
+  /// The fallback is not defensive padding — `launchUrl` genuinely fails on
+  /// devices with no browser, on a locked-down work profile, or when Android's
+  /// package visibility hides every browser (which is why the manifest
+  /// declares an `https` `<intent>` under `<queries>`). Showing a dead link is
+  /// worse than showing the address, so the user can always still reach the
+  /// page.
+  Future<void> _openLink(String title, String url) async {
+    final Uri uri = Uri.parse(url);
+    try {
+      final bool opened =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (opened) return;
+    } catch (_) {
+      // Fall through to the dialog below.
+    }
+    if (!mounted) return;
+    await _showLink(title, url);
+  }
+
+  /// Presents [url] in a copyable dialog — the fallback path for [_openLink].
   Future<void> _showLink(String title, String url) async {
     await showDialog<void>(
       context: context,
@@ -295,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _SettingsRow(
                         icon: Icons.privacy_tip_outlined,
                         label: AppStrings.privacyPolicy,
-                        onTap: () => _showLink(
+                        onTap: () => _openLink(
                           AppStrings.privacyPolicy,
                           AppStrings.privacyPolicyUrl,
                         ),
@@ -303,7 +318,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _SettingsRow(
                         icon: Icons.description_outlined,
                         label: AppStrings.termsOfService,
-                        onTap: () => _showLink(
+                        onTap: () => _openLink(
                           AppStrings.termsOfService,
                           AppStrings.termsUrl,
                         ),
