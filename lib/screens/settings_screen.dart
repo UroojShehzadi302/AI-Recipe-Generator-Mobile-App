@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,8 @@ import '../providers/notification_provider.dart';
 import '../providers/text_scale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../routes/app_routes.dart';
+// ⚠️ TEMPORARY — only the debug-only crash-test rows use this. Remove with them.
+import '../services/crash_reporter.dart';
 
 /// Settings (M11) — preferences, legal links, and account actions.
 ///
@@ -51,6 +54,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _setNotifications(bool enabled) async {
     await context.read<NotificationProvider>().setNotificationsEnabled(enabled);
+  }
+
+  // ⚠️ TEMPORARY — the two handlers below back the debug-only group at the
+  // bottom of this screen. Delete both, their rows, and their AppStrings once
+  // Crashlytics is confirmed working. They are only reachable from a `if
+  // (kDebugMode)` subtree, so a release build cannot call them.
+
+  /// Reports a caught, NON-fatal error — the app keeps running.
+  ///
+  /// Try this one first: it exercises the whole path (seam → Crashlytics →
+  /// console) without killing the process, so if it lands you know the wiring
+  /// is right and any later silence is a console/config problem, not code.
+  void _sendTestCrashReport() {
+    CrashReporter.recordErrorSafely(
+      Exception('CookMate AI test report — triggered from Settings'),
+      StackTrace.current,
+    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text(AppStrings.debugReportSent)),
+      );
+  }
+
+  /// Throws for real, terminating the app.
+  ///
+  /// This is the case Crashlytics is actually built for, and it behaves
+  /// differently from the non-fatal above: the report is written to disk as the
+  /// process dies and uploaded on the NEXT launch. The app closing is the
+  /// feature working, not a bug — reopen it, wait a moment, then look at the
+  /// console.
+  void _forceCrash() {
+    throw StateError('CookMate AI forced crash — triggered from Settings');
   }
 
   static IconData _themeIcon(ThemeMode mode) {
@@ -350,6 +386,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+
+                // ⚠️ TEMPORARY — DEBUG BUILDS ONLY. Exists to prove reports
+                // actually reach the Crashlytics console, which no test can
+                // show. `kDebugMode` is a compile-time constant, so this whole
+                // subtree is tree-shaken out of a release build and cannot
+                // reach a user. DELETE once the console shows a report.
+                if (kDebugMode) ...[
+                  const SizedBox(height: AppDimensions.spaceL),
+                  FadeSlideIn(
+                    delay: AppAnimations.staggerFor(3),
+                    child: _SettingsGroup(
+                      title: AppStrings.debugGroup,
+                      children: [
+                        _SettingsRow(
+                          icon: Icons.bug_report_outlined,
+                          label: AppStrings.debugSendTestReport,
+                          onTap: _sendTestCrashReport,
+                        ),
+                        _SettingsRow(
+                          icon: Icons.dangerous_outlined,
+                          label: AppStrings.debugForceCrash,
+                          onTap: _forceCrash,
+                          destructive: true,
+                          isLast: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: AppDimensions.spaceXl),
                 Center(
