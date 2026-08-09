@@ -22,6 +22,8 @@ import '../services/firestore_service.dart';
 import '../services/gemini_direct_service.dart';
 import '../services/meal_db_service.dart';
 import '../services/notification_service.dart';
+import '../services/platform_share_service.dart';
+import '../services/share_service.dart';
 import '../services/unconfigured_ai_service.dart';
 
 /// Root widget: builds the dependency graph, provides the state layer, and
@@ -43,6 +45,12 @@ class RecipeGeneratorApp extends StatelessWidget {
     final firestoreService = FirestoreService();
     final mealDbService = MealDbService();
     final notificationService = NotificationService();
+
+    // Sharing. Uses Flutter's built-in `Share.invoke` platform channel with a
+    // clipboard fallback, so it needs no third-party package. Swapping this one
+    // line to a `share_plus`-backed implementation later leaves the UI
+    // untouched — RecipeDetailScreen depends on the ShareService interface.
+    const ShareService shareService = PlatformShareService();
 
     // Usage accounting. Built before the AI service because it IS the sink the
     // service reports token costs to. The uid is read lazily per call (rather
@@ -73,6 +81,9 @@ class RecipeGeneratorApp extends StatelessWidget {
     // --- Providers (UI state) ---
     return MultiProvider(
       providers: [
+        // Plain value, not a ChangeNotifier: sharing is stateless, so nothing
+        // ever rebuilds because of it. Screens read it with `context.read`.
+        Provider<ShareService>.value(value: shareService),
         ChangeNotifierProvider<AuthProvider>(
           create: (_) => AuthProvider(authRepository),
         ),
