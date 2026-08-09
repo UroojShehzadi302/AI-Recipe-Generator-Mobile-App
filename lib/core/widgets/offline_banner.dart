@@ -74,11 +74,22 @@ class _OfflineStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The status-bar inset is applied HERE, on the visible strip, rather than
+    // by a SafeArea around the whole banner. Wrapping the banner meant the
+    // padding was added even when it had collapsed to zero height, leaving an
+    // empty strip across the top of every screen while online. Paying the inset
+    // only while the strip is showing keeps the online case free.
+    final double topInset = MediaQuery.paddingOf(context).top;
+
     return Container(
       width: double.infinity,
-      height: OfflineBanner.height,
+      height: OfflineBanner.height + topInset,
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceL),
+      padding: EdgeInsets.only(
+        top: topInset,
+        left: AppDimensions.spaceL,
+        right: AppDimensions.spaceL,
+      ),
       // A tinted wash rather than a solid warning fill: solid amber across the
       // full width would out-shout the content it sits above.
       color: AppColors.warning.withValues(alpha: 0.16),

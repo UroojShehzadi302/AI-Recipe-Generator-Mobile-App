@@ -105,14 +105,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         // floats over the body via `extendBody: true`, and every tab pads its
         // own scrollable by `navBarClearance`. Adding anything at the bottom
         // here would break that arrangement.
+        // ⚠️ No SafeArea around the banner. Wrapping it here padded the status
+        // bar height unconditionally — including when the banner had collapsed
+        // to zero — leaving an empty strip across the top of every screen. The
+        // banner applies its own top inset only while it is actually visible,
+        // so online costs exactly zero height. Each tab already handles its own
+        // status-bar inset, as it did before the banner existed.
         child: Column(
           children: [
-            // Top-only SafeArea: the strip must clear the status bar/notch, but
-            // the tabs below manage their own bottom inset.
-            const SafeArea(
-              bottom: false,
-              child: OfflineBanner(),
-            ),
+            const OfflineBanner(),
             Expanded(
               child: IndexedStack(index: _index, children: pages),
             ),
