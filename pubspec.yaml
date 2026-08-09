@@ -30,6 +30,11 @@ dependencies:
   firebase_remote_config: ^6.5.5
   firebase_messaging: ^16.4.3
   shared_preferences: ^2.5.5
+  # Crash reporting (M14). Major must track firebase_core's (core ^4 →
+  # crashlytics ^5); a mismatch fails at pub resolution. Only
+  # services/crashlytics_crash_reporter.dart imports it — everything else
+  # depends on the CrashReporter interface.
+  firebase_crashlytics: ^5.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

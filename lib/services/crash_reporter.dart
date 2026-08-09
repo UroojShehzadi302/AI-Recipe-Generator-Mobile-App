@@ -30,102 +30,30 @@
 //   `kDebugMode`. Callers must not pass credentials, tokens, prompts, or user
 //   content as breadcrumbs; see [log].
 //
-// ┌──────────────────────────────────────────────────────────────────────────┐
-// │ ADOPTION: WIRING CRASHLYTICS IS ONE LINE OF DART, PLUS OWNER SETUP.      │
-// │                                                                          │
-// │ ⚠️ NOT DONE HERE ON PURPOSE. Adding a dependency is the owner's call,    │
-// │ and Crashlytics additionally needs a Firebase console step that only     │
-// │ the owner can perform, so it could not have been completed from code.    │
-// │ Everything below was verified against how this repo already wires        │
-// │ Firebase (see `firebase_messaging` in pubspec.yaml, the                  │
-// │ `com.google.gms.google-services` plugin in the two Gradle files, and     │
-// │ `Firebase.initializeApp` in `main.dart`).                                │
-// │                                                                          │
-// │ 1. DEPENDENCY — `pubspec.yaml`, under `dependencies:` next to the other  │
-// │    Firebase entries (firebase_core ^4.0.0 is already there):             │
-// │                                                                          │
-// │      firebase_crashlytics: ^5.0.0                                        │
-// │                                                                          │
-// │    then `flutter pub get`. Pick the version whose major matches the      │
-// │    firebase_core major in use (core ^4 → crashlytics ^5); a mismatch     │
-// │    fails at pub resolution, not at runtime.                              │
-// │                                                                          │
-// │ 2. GRADLE — Crashlytics needs its own Gradle plugin (unlike FCM, which   │
-// │    needed none). It uploads the obfuscation mapping file, WITHOUT which  │
-// │    every release stack trace arrives unreadable, because this app runs   │
-// │    R8 (`isMinifyEnabled = true` in android/app/build.gradle.kts).        │
-// │                                                                          │
-// │    a. `android/settings.gradle.kts` — add to the `plugins { }` block,    │
-// │       beside the existing google-services line:                          │
-// │                                                                          │
-// │         id("com.google.firebase.crashlytics") version "3.0.2" apply false│
-// │                                                                          │
-// │    b. `android/app/build.gradle.kts` — add to its `plugins { }` block,   │
-// │       AFTER `id("com.google.gms.google-services")`:                      │
-// │                                                                          │
-// │         id("com.google.firebase.crashlytics")                            │
-// │                                                                          │
-// │    No manifest entry and no new permission are required.                 │
-// │                                                                          │
-// │ 3. FIREBASE CONSOLE (OWNER-ONLY — cannot be done from code) —            │
-// │    console → project `ai-recipe-generator-db27c` → Release & Monitor →   │
-// │    Crashlytics → "Enable Crashlytics". It stays greyed out with a        │
-// │    "waiting for your first crash" state until a real report arrives, so  │
-// │    verify by forcing one from a debug build:                             │
-// │      FirebaseCrashlytics.instance.crash();                               │
-// │    ⚠️ Crashlytics batches: a crash is usually uploaded on the NEXT app   │
-// │    launch, not the one that crashed. Relaunch before concluding it is    │
-// │    broken. Free (Spark) plan — no Blaze upgrade needed.                  │
-// │    ⚠️ Select the `com.urooj.cookmate` app; two stale Android apps are    │
-// │    also registered in this project (see CLAUDE.md → Package identity).   │
-// │                                                                          │
-// │ 4. THE ONE LINE OF DART — in `main.dart`, inside the guarded zone and    │
-// │    AFTER `await Firebase.initializeApp(...)` (Crashlytics resolves       │
-// │    `FirebaseCrashlytics.instance`, so it must come after init):          │
-// │                                                                          │
-// │      CrashReporter.instance = CrashlyticsCrashReporter();                │
-// │                                                                          │
-// │    That is the whole change. `_reportError`, `runZonedGuarded`,          │
-// │    `FlutterError.onError` and `PlatformDispatcher.onError` all stay      │
-// │    exactly as they are, because they call the seam and not an impl.      │
-// │                                                                          │
-// │ 5. THE IMPLEMENTATION — a new `lib/services/crashlytics_crash_reporter`  │
-// │    `.dart`, the only file in the app allowed to import the package:      │
-// │                                                                          │
-// │      class CrashlyticsCrashReporter implements CrashReporter {           │
-// │        const CrashlyticsCrashReporter();                                 │
-// │        FirebaseCrashlytics get _c => FirebaseCrashlytics.instance;       │
-// │        @override                                                         │
-// │        void recordError(Object error, StackTrace? stack,                 │
-// │                        {bool fatal = false}) {                           │
-// │          unawaited(_c.recordError(error, stack, fatal: fatal));          │
-// │        }                                                                 │
-// │        @override                                                         │
-// │        void log(String message) => unawaited(_c.log(message));           │
-// │        @override                                                         │
-// │        void setUserId(String? userId) =>                                 │
-// │            unawaited(_c.setUserIdentifier(userId ?? ''));                │
-// │      }                                                                   │
-// │                                                                          │
-// │    Resolve `FirebaseCrashlytics.instance` LAZILY (a getter, never the    │
-// │    constructor) — the same rule every other service here follows, so the │
-// │    reporter stays constructible in a test with no Firebase. Do not       │
-// │    await inside these methods: the callers are synchronous void          │
-// │    handlers. [CrashReporter.report] already wraps the call in a          │
-// │    try/catch, so a Crashlytics failure cannot escape.                    │
-// │                                                                          │
-// │ 6. OPTIONAL, ONCE ADOPTED —                                              │
-// │    * Correlate reports with a user: call                                 │
-// │      `CrashReporter.report.setUserId(uid)` on sign-in and                │
-// │      `setUserId(null)` on sign-out, from `AuthProvider`. The Firebase    │
-// │      uid is an opaque id, not PII — never pass the email or the name.    │
-// │    * The FCM background isolate can report too: it runs                  │
-// │      `Firebase.initializeApp` itself (see                                │
-// │      `_firebaseMessagingBackgroundHandler` in `main.dart`) but has its   │
-// │      OWN copy of every static, so it must set `CrashReporter.instance`   │
-// │      again there. Left unset it degrades to [DebugCrashReporter],        │
-// │      which is safe — never a crash.                                      │
-// └──────────────────────────────────────────────────────────────────────────┘
+// ── Status (M14): ADOPTED ────────────────────────────────────────────────────
+// `CrashlyticsCrashReporter` is installed in `main()` right after
+// `Firebase.initializeApp`. The Gradle plugin is applied in both
+// `android/settings.gradle.kts` and `android/app/build.gradle.kts` — required,
+// not optional, because this app ships with R8 and that plugin uploads the
+// obfuscation mapping file. Without it every release stack trace is unreadable.
+//
+// ⚠️ OWNER STEP OUTSTANDING: reports have nowhere to land until Crashlytics is
+// enabled in the Firebase console (Release & Monitor → Crashlytics) for the
+// **com.urooj.cookmate** app — two stale Android apps are also registered in
+// this project, so pick carefully. Free plan; no Blaze needed. Crashlytics
+// batches, so a crash uploads on the NEXT launch: relaunch before concluding it
+// is broken. To force one from a debug build:
+// `FirebaseCrashlytics.instance.crash();`
+//
+// Optional follow-up, not wired: call `CrashReporter.report.setUserId(uid)` on
+// sign-in and `setUserId(null)` on sign-out from `AuthProvider` to correlate
+// reports with an account. The Firebase uid is opaque, not PII — never pass an
+// email or display name.
+//
+// The FCM background isolate has its OWN copy of every static, so it would need
+// `CrashReporter.instance` set again inside `_firebaseMessagingBackgroundHandler`
+// to report from there. Left unset it degrades to [DebugCrashReporter], which is
+// safe — never a crash.
 
 import 'package:flutter/foundation.dart';
 

@@ -12,6 +12,7 @@ import 'firebase_options.dart';
 import 'providers/text_scale_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/crash_reporter.dart';
+import 'services/crashlytics_crash_reporter.dart';
 import 'services/notification_service.dart';
 import 'services/notification_store.dart';
 
@@ -89,16 +90,21 @@ Future<void> main() async {
       );
 
       // ── Crash reporting (M14) ──────────────────────────────────────────────
-      // Prepared but NOT adopted: no reporting backend is wired, so the default
-      // DebugCrashReporter stays installed (logs in debug, silent in release).
-      // Adopting Crashlytics is ONE line, and it belongs right here — after
-      // Firebase.initializeApp, since the reporter resolves
-      // FirebaseCrashlytics.instance:
+      // Must come after Firebase.initializeApp: the reporter resolves
+      // FirebaseCrashlytics.instance on first use.
       //
-      //   CrashReporter.instance = CrashlyticsCrashReporter();
+      // Errors from here on are reported through the same _reportError funnel
+      // as before — only the backend behind the seam changed. Anything thrown
+      // BEFORE this line still reports through DebugCrashReporter, which is the
+      // correct fallback rather than a gap: Crashlytics is unusable until
+      // Firebase exists.
       //
-      // Full checklist (pubspec, Gradle plugin, Firebase console step) is in
-      // the ADOPTION block at the top of services/crash_reporter.dart.
+      // ⚠️ OWNER: reports have nowhere to land until Crashlytics is enabled in
+      // the Firebase console (Release & Monitor → Crashlytics) for the
+      // com.urooj.cookmate app. Harmless until then and needs no code change.
+      // Crashlytics also batches — a crash uploads on the NEXT launch, so
+      // relaunch before concluding it is broken.
+      CrashReporter.instance = const CrashlyticsCrashReporter();
 
       // Register the background message handler (top-level, vm:entry-point)
       // after Firebase is initialized and before runApp. Non-fatal on failure.

@@ -23,6 +23,10 @@ plugins {
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version("4.3.15") apply false
     // END: FlutterFire Configuration
+    // Crashlytics (M14). Required, not optional: this app ships with R8
+    // (isMinifyEnabled = true), and this plugin is what uploads the obfuscation
+    // mapping file. Without it every release stack trace arrives unreadable.
+    id("com.google.firebase.crashlytics") version("3.0.2") apply false
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
