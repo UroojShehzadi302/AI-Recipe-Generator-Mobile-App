@@ -328,11 +328,11 @@ class _IdentityCard extends StatelessWidget {
                   bottom: 0,
                   child: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.surface,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.edit_rounded,
                       size: 12,
                       color: AppColors.primary,
@@ -534,7 +534,7 @@ class _MenuRow extends StatelessWidget {
               ),
             ),
             if (!isLast)
-              const Divider(
+              Divider(
                 height: 1,
                 thickness: 1,
                 indent: 64,
@@ -624,7 +624,7 @@ class _EmailVerificationBannerState extends State<_EmailVerificationBanner> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
+            Icon(
               Icons.mark_email_unread_outlined,
               color: AppColors.primaryDark,
               size: AppDimensions.iconMd,

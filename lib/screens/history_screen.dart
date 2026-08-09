@@ -321,7 +321,7 @@ class _HistoryTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 color: AppColors.textTertiary,
                 size: AppDimensions.iconMd,
@@ -341,7 +341,7 @@ class _HistoryTile extends StatelessWidget {
         width: size,
         height: size,
         child: entry.recipe.imageUrl.isEmpty
-            ? const DecoratedBox(
+            ? DecoratedBox(
                 decoration:
                     BoxDecoration(gradient: AppColors.placeholderGradient),
                 child: Icon(
@@ -354,7 +354,7 @@ class _HistoryTile extends StatelessWidget {
                 entry.recipe.imageUrl,
                 fit: BoxFit.cover,
                 cacheWidth: (size * 3).round(),
-                errorBuilder: (_, _, _) => const DecoratedBox(
+                errorBuilder: (_, _, _) => DecoratedBox(
                   decoration:
                       BoxDecoration(gradient: AppColors.placeholderGradient),
                   child: Icon(
@@ -410,7 +410,7 @@ class _HistoryTile extends StatelessWidget {
         color: AppColors.error,
         borderRadius: AppDimensions.brLg,
       ),
-      child: const Icon(
+      child: Icon(
         Icons.delete_outline_rounded,
         color: AppColors.onPrimary,
       ),

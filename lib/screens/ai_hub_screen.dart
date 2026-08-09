@@ -46,8 +46,8 @@ class _AiHubScreenState extends State<AiHubScreen> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(
-            content: Text('Sign in to save and view chat history'),
+          SnackBar(
+            content: const Text('Sign in to save and view chat history'),
             backgroundColor: AppColors.primaryDark,
             behavior: SnackBarBehavior.floating,
           ),
@@ -109,7 +109,7 @@ class _AiHubScreenState extends State<AiHubScreen> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -127,13 +127,13 @@ class _AiHubScreenState extends State<AiHubScreen> {
                 IconButton(
                   onPressed: _newChat,
                   tooltip: 'New chat',
-                  icon: const Icon(Icons.add_comment_outlined,
+                  icon: Icon(Icons.add_comment_outlined,
                       color: AppColors.primary),
                 ),
                 IconButton(
                   onPressed: _openHistory,
                   tooltip: 'Chat history',
-                  icon: const Icon(Icons.history, color: AppColors.primary),
+                  icon: Icon(Icons.history, color: AppColors.primary),
                 ),
               ],
             ],
@@ -461,7 +461,7 @@ class _ChatViewState extends State<_ChatView> {
               color: AppColors.primarySoft,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.forum_outlined,
+            child: Icon(Icons.forum_outlined,
                 color: AppColors.primary, size: 30),
           ),
           const SizedBox(height: AppDimensions.spaceL),
@@ -497,7 +497,7 @@ class _ChatViewState extends State<_ChatView> {
       // navBarOverlap (bar height + margin) rather than the larger
       // navBarClearance — the latter is sized for scrollables that must clear
       // the bar completely, and here it pushed the field visibly too high.
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         boxShadow: AppShadows.card,
       ),
@@ -673,9 +673,9 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           horizontal: AppDimensions.spaceL,
           vertical: AppDimensions.spaceM,
         ),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.only(
+          borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(AppDimensions.radiusLg),
             topRight: Radius.circular(AppDimensions.radiusLg),
             bottomLeft: Radius.circular(AppDimensions.spaceXs),
@@ -696,7 +696,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: Opacity(
                     opacity: opacity,
-                    child: const CircleAvatar(
+                    child: CircleAvatar(
                       radius: 4,
                       backgroundColor: AppColors.primary,
                     ),
@@ -730,11 +730,11 @@ class _StarterCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppDimensions.spaceL),
           child: Row(
             children: <Widget>[
-              const Icon(Icons.tips_and_updates_outlined,
+              Icon(Icons.tips_and_updates_outlined,
                   color: AppColors.secondary, size: 20),
               const SizedBox(width: AppDimensions.spaceM),
               Expanded(child: Text(label, style: AppTextStyles.body)),
-              const Icon(Icons.north_east,
+              Icon(Icons.north_east,
                   color: AppColors.textSecondary, size: 16),
             ],
           ),
@@ -776,7 +776,7 @@ class _HistorySheet extends StatelessWidget {
               padding: const EdgeInsets.all(AppDimensions.spaceL),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.history, color: AppColors.primary),
+                  Icon(Icons.history, color: AppColors.primary),
                   const SizedBox(width: AppDimensions.spaceM),
                   Text('Chat history', style: AppTextStyles.title),
                 ],
@@ -808,14 +808,14 @@ class _HistorySheet extends StatelessWidget {
                       bottom: AppDimensions.spaceL,
                     ),
                     itemCount: sessions.length,
-                    separatorBuilder: (_, _) => const Divider(
+                    separatorBuilder: (_, _) => Divider(
                       height: 1,
                       color: AppColors.border,
                     ),
                     itemBuilder: (context, index) {
                       final ChatSession session = sessions[index];
                       return ListTile(
-                        leading: const Icon(Icons.chat_bubble_outline,
+                        leading: Icon(Icons.chat_bubble_outline,
                             color: AppColors.primary),
                         title: Text(
                           session.title.isEmpty ? 'Conversation' : session.title,
@@ -833,7 +833,7 @@ class _HistorySheet extends StatelessWidget {
                                 style: AppTextStyles.caption,
                               ),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline,
+                          icon: Icon(Icons.delete_outline,
                               color: AppColors.textSecondary),
                           tooltip: 'Delete',
                           onPressed: () =>

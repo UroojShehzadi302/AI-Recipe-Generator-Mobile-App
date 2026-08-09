@@ -118,7 +118,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       alignment: Alignment.centerLeft,
                       child: IconButton(
                         padding: EdgeInsets.zero,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.arrow_back_rounded,
                           color: AppColors.primary,
                         ),
@@ -140,10 +140,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               errorBuilder: (_, _, _) => Container(
                                 height: 64,
                                 width: 64,
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   gradient: AppColors.brandGradient,
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.restaurant_menu_rounded,
                                   size: 32,
                                   color: AppColors.onPrimary,

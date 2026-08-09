@@ -172,7 +172,7 @@ class _UsageScreenState extends State<UsageScreen> {
             const SizedBox(height: AppDimensions.spaceXl),
             FadeSlideIn(
               delay: AppAnimations.staggerFor(2),
-              child: const Text(
+              child: Text(
                 AppStrings.usageBreakdownTitle,
                 style: AppTextStyles.sectionTitle,
               ),
@@ -186,7 +186,7 @@ class _UsageScreenState extends State<UsageScreen> {
           const SizedBox(height: AppDimensions.spaceXl),
           FadeSlideIn(
             delay: AppAnimations.staggerFor(4),
-            child: const Text(
+            child: Text(
               AppStrings.usageRecentTitle,
               style: AppTextStyles.sectionTitle,
             ),
@@ -249,7 +249,7 @@ class _TotalCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.bolt_rounded,
                 size: AppDimensions.iconMd,
                 color: AppColors.onPrimary,
@@ -452,7 +452,7 @@ class _BreakdownRow extends StatelessWidget {
             value: fraction.clamp(0.0, 1.0),
             minHeight: 6,
             backgroundColor: AppColors.primarySoft,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
           ),
         ),
       ],

@@ -56,7 +56,7 @@ class GoogleButton extends StatelessWidget {
             borderRadius: AppDimensions.brMd,
             child: Center(
               child: isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
@@ -72,7 +72,7 @@ class GoogleButton extends StatelessWidget {
                           AppAssets.googleIcon,
                           width: 20,
                           height: 20,
-                          errorBuilder: (_, _, _) => const Icon(
+                          errorBuilder: (_, _, _) => Icon(
                             Icons.login_rounded,
                             size: 20,
                             color: AppColors.textPrimary,

@@ -104,10 +104,10 @@ class _SplashScreenState extends State<SplashScreen>
                           errorBuilder: (_, _, _) => Container(
                             height: 112,
                             width: 112,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               gradient: AppColors.brandGradient,
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.restaurant_menu_rounded,
                               size: 56,
                               color: AppColors.onPrimary,
@@ -147,7 +147,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                 FadeTransition(
                   opacity: _fade,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 26,
                     height: 26,
                     child: CircularProgressIndicator(

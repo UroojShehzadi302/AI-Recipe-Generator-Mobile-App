@@ -45,7 +45,7 @@ class _ShimmerState extends State<Shimmer>
             return LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: const <Color>[
+              colors: <Color>[
                 AppColors.primarySoft,
                 AppColors.surface,
                 AppColors.primarySoft,

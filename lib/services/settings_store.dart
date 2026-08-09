@@ -12,6 +12,9 @@
 // read the notifications preference on its own before appending to the inbox.
 
 import 'package:flutter/foundation.dart';
+// For ThemeMode only — this file stays widget-free so the FCM background
+// isolate can use it.
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Reads and writes the user's on-device settings.
@@ -49,6 +52,64 @@ class SettingsStore {
       await prefs.setBool(notificationsKey, enabled);
     } catch (e) {
       debugPrint('SettingsStore.setNotificationsEnabled failed: $e');
+    }
+  }
+
+  /// SharedPreferences key for the light/dark/system theme preference.
+  static const String themeModeKey = 'settings_theme_mode';
+
+  /// Stored as a stable string rather than [ThemeMode.index].
+  ///
+  /// The index would silently change meaning if the enum were ever reordered,
+  /// turning a stored "dark" into "light" on upgrade. Names cost nothing and
+  /// cannot rot that way.
+  static const String _system = 'system';
+  static const String _light = 'light';
+  static const String _dark = 'dark';
+
+  /// The user's saved theme choice, defaulting to [ThemeMode.system].
+  ///
+  /// Following the device is the right default for a fresh install: asserting a
+  /// preference the user never expressed is worse than matching their phone.
+  /// An unrecognised stored value also falls back to system.
+  static Future<ThemeMode> loadThemeMode() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      switch (prefs.getString(themeModeKey)) {
+        case _light:
+          return ThemeMode.light;
+        case _dark:
+          return ThemeMode.dark;
+        case _system:
+          return ThemeMode.system;
+        default:
+          return ThemeMode.system;
+      }
+    } catch (e) {
+      debugPrint('SettingsStore.loadThemeMode failed: $e');
+      return ThemeMode.system;
+    }
+  }
+
+  /// Persists the theme choice.
+  static Future<void> saveThemeMode(ThemeMode mode) async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(themeModeKey, _nameFor(mode));
+    } catch (e) {
+      debugPrint('SettingsStore.saveThemeMode failed: $e');
+    }
+  }
+
+  static String _nameFor(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return _light;
+      case ThemeMode.dark:
+        return _dark;
+      case ThemeMode.system:
+        return _system;
     }
   }
 }

@@ -81,7 +81,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       // One warm background gradient for every tab, set here rather than in
       // each screen so they can't drift apart.
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: AppColors.backgroundGradient,
         ),
         child: IndexedStack(index: _index, children: pages),

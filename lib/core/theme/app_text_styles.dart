@@ -45,7 +45,7 @@ class AppTextStyles {
   // ---- Display scale (Fraunces) ----
 
   /// 28 · Hero brand text (splash, the single largest thing on a screen).
-  static const TextStyle display = TextStyle(
+  static TextStyle get display => TextStyle(
     fontFamily: displayFamily,
     fontSize: 28,
     fontWeight: FontWeight.w600,
@@ -55,7 +55,7 @@ class AppTextStyles {
   );
 
   /// 22 · The primary title of a screen ("Profile", "Saved Recipes").
-  static const TextStyle screenTitle = TextStyle(
+  static TextStyle get screenTitle => TextStyle(
     fontFamily: displayFamily,
     fontSize: 22,
     fontWeight: FontWeight.w600,
@@ -65,7 +65,7 @@ class AppTextStyles {
   );
 
   /// 18 · Section / rail headers within a screen.
-  static const TextStyle sectionTitle = TextStyle(
+  static TextStyle get sectionTitle => TextStyle(
     fontFamily: displayFamily,
     fontSize: 18,
     fontWeight: FontWeight.w600,
@@ -77,7 +77,7 @@ class AppTextStyles {
   // ---- UI scale (Inter) ----
 
   /// 16 · Card titles and list-row labels.
-  static const TextStyle cardTitle = TextStyle(
+  static TextStyle get cardTitle => TextStyle(
     fontFamily: fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w600,
@@ -87,7 +87,7 @@ class AppTextStyles {
   );
 
   /// 14 · Default running text.
-  static const TextStyle body = TextStyle(
+  static TextStyle get body => TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w400,
@@ -96,7 +96,7 @@ class AppTextStyles {
   );
 
   /// 14 · Body weight-up, for emphasis inside paragraphs.
-  static const TextStyle bodyMedium = TextStyle(
+  static TextStyle get bodyMedium => TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w500,
@@ -105,7 +105,7 @@ class AppTextStyles {
   );
 
   /// 12 · Supporting / secondary text.
-  static const TextStyle caption = TextStyle(
+  static TextStyle get caption => TextStyle(
     fontFamily: fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w400,
@@ -114,7 +114,7 @@ class AppTextStyles {
   );
 
   /// 11 · Chips, nav labels, badges, metadata.
-  static const TextStyle label = TextStyle(
+  static TextStyle get label => TextStyle(
     fontFamily: fontFamily,
     fontSize: 11,
     fontWeight: FontWeight.w500,
@@ -123,14 +123,18 @@ class AppTextStyles {
     color: AppColors.textSecondary,
   );
 
-  /// 14 · Button label. Sits on a filled brand surface, so it defaults white.
-  static const TextStyle button = TextStyle(
+  /// 14 · Button label. Sits on a filled brand surface.
+  // Uses AppColors.onPrimary rather than a literal white: the dark palette
+  // lightens the brand primary, so white-on-primary — correct on the light
+  // theme's deep brown — becomes nearly illegible there. onPrimary is white in
+  // light mode and near-black in dark, so this reads correctly in both.
+  static TextStyle get button => TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w600,
     height: 1.2,
     letterSpacing: 0.2,
-    color: Colors.white,
+    color: AppColors.onPrimary,
   );
 
   // ---- Semantic aliases ----
@@ -140,7 +144,7 @@ class AppTextStyles {
   // header, and `heading` to the screen title.
 
   /// Muted supporting text under a heading (14, secondary color).
-  static const TextStyle subtitle = TextStyle(
+  static TextStyle get subtitle => TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w400,
@@ -149,8 +153,8 @@ class AppTextStyles {
   );
 
   /// Alias of [sectionTitle] — kept for existing call sites.
-  static const TextStyle title = sectionTitle;
+  static TextStyle get title => sectionTitle;
 
   /// Alias of [screenTitle] — kept for existing call sites.
-  static const TextStyle heading = screenTitle;
+  static TextStyle get heading => screenTitle;
 }

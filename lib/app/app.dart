@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
+import '../providers/theme_provider.dart';
 import '../providers/usage_provider.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/chat_repository.dart';
@@ -33,10 +34,20 @@ import '../services/unconfigured_ai_service.dart';
 /// construct Firebase/AI clients themselves. Providers are the only thing the
 /// widget tree talks to.
 class RecipeGeneratorApp extends StatelessWidget {
-  const RecipeGeneratorApp({super.key, required this.aiConfig});
+  const RecipeGeneratorApp({
+    super.key,
+    required this.aiConfig,
+    this.themeProvider,
+  });
 
   /// AI key/model resolved at startup by [AiConfig.load] (from `env.json`).
   final AiConfig aiConfig;
+
+  /// The theme controller, pre-loaded in `main()` so the stored preference is
+  /// applied before the first frame rather than flashing light and correcting
+  /// itself. Optional: tests and any caller that does not care get a default
+  /// system-mode controller.
+  final ThemeProvider? themeProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -101,17 +112,37 @@ class RecipeGeneratorApp extends StatelessWidget {
           // frame by the widget tree (see MainShell) so tests stay safe.
           create: (_) => NotificationProvider(notificationService),
         ),
+        ChangeNotifierProvider<ThemeProvider>(
+          create: (_) => themeProvider ?? ThemeProvider(),
+        ),
       ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: AppStrings.appName,
-        theme: AppTheme.lightTheme,
-        // One scroll behavior for the whole app: bouncing physics + a stretch
-        // overscroll indicator, so every list feels the same without each
-        // scrollable setting `physics:` itself.
-        scrollBehavior: const AppScrollBehavior(),
-        initialRoute: AppRoutes.splash,
-        onGenerateRoute: AppRoutes.onGenerateRoute,
+      // Watches ThemeProvider so a theme change rebuilds MaterialApp. Without
+      // this the widget would be built once and the app would keep the theme it
+      // started with.
+      child: Consumer<ThemeProvider>(
+        builder: (BuildContext context, ThemeProvider themeProvider, _) {
+          // Keep the global palette in step with the OS when following the
+          // system theme. MaterialApp rebuilds on a platform brightness change
+          // but AppPalette is not reactive, so it has to be re-resolved here —
+          // before the subtree below reads any AppColors getter.
+          themeProvider.syncWithPlatformBrightness(
+            MediaQuery.platformBrightnessOf(context),
+          );
+
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: AppStrings.appName,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.mode,
+            // One scroll behavior for the whole app: bouncing physics + a
+            // stretch overscroll indicator, so every list feels the same
+            // without each scrollable setting `physics:` itself.
+            scrollBehavior: const AppScrollBehavior(),
+            initialRoute: AppRoutes.splash,
+            onGenerateRoute: AppRoutes.onGenerateRoute,
+          );
+        },
       ),
     );
   }

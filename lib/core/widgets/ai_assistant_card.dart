@@ -39,16 +39,16 @@ class AiAssistantCard extends StatelessWidget {
         child: ClipRRect(
           borderRadius: AppDimensions.brXl,
           child: DecoratedBox(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: <Color>[
-                  Color(0xFF9C6B44), // lifted highlight edge
+                  const Color(0xFF9C6B44), // lifted highlight edge
                   AppColors.primary,
                   AppColors.primaryDark,
                 ],
-                stops: <double>[0, 0.45, 1],
+                stops: const <double>[0, 0.45, 1],
               ),
             ),
             child: Stack(
@@ -144,7 +144,7 @@ class AiAssistantCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppDimensions.spaceXs + 2),
-          const Icon(
+          Icon(
             Icons.arrow_forward_rounded,
             size: AppDimensions.iconSm,
             color: AppColors.primary,
@@ -176,7 +176,7 @@ class AiAssistantCard extends StatelessWidget {
             shape: BoxShape.circle,
             color: AppColors.onPrimary.withValues(alpha: 0.16),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.auto_awesome,
             color: AppColors.onPrimary,
             size: 24,

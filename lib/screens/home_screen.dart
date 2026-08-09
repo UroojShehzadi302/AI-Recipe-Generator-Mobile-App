@@ -237,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.search_rounded,
               color: AppColors.textSecondary,
               size: AppDimensions.iconMd,
@@ -398,7 +398,7 @@ class _HomeHeader extends StatelessWidget {
                 style: AppTextStyles.sectionTitle,
               ),
               const SizedBox(height: AppDimensions.space2),
-              const Text(
+              Text(
                 'What would you like to cook today?',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -501,7 +501,7 @@ class _RailError extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off, color: AppColors.textSecondary, size: 30),
+            Icon(Icons.wifi_off, color: AppColors.textSecondary, size: 30),
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -530,7 +530,7 @@ class _RailEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SizedBox(
       height: 212,
       child: Center(
         child: Text(
@@ -582,7 +582,7 @@ class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
               padding: const EdgeInsets.all(AppDimensions.spaceL),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.notifications_none, color: AppColors.primary),
+                  Icon(Icons.notifications_none, color: AppColors.primary),
                   const SizedBox(width: AppDimensions.spaceM),
                   Text('Notifications', style: AppTextStyles.title),
                   const Spacer(),
@@ -590,7 +590,7 @@ class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
                     builder: (context, notif, _) {
                       if (notif.items.isEmpty) return const SizedBox.shrink();
                       return PopupMenuButton<String>(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.more_horiz,
                           color: AppColors.primary,
                         ),
@@ -635,7 +635,7 @@ class _NotificationInboxSheetState extends State<_NotificationInboxSheet> {
                     shrinkWrap: true,
                     padding: const EdgeInsets.only(bottom: AppDimensions.spaceL),
                     itemCount: items.length,
-                    separatorBuilder: (_, _) => const Divider(
+                    separatorBuilder: (_, _) => Divider(
                       height: 1,
                       color: AppColors.border,
                     ),
@@ -697,7 +697,7 @@ class _NotificationTile extends StatelessWidget {
           : Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.error,
                 shape: BoxShape.circle,
               ),
@@ -768,11 +768,11 @@ class _NotificationsEmpty extends StatelessWidget {
           Container(
             width: 64,
             height: 64,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.primarySoft,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.notifications_off_outlined,
               color: AppColors.primary,
               size: 30,

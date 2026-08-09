@@ -219,7 +219,7 @@ class _AvatarCropScreenState extends State<AvatarCropScreen> {
       );
     }
     if (_image == null) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(color: AppColors.secondary),
       );
     }

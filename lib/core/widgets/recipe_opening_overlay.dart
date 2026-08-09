@@ -161,7 +161,7 @@ class _PulsingThumbnailState extends State<_PulsingThumbnail>
     );
   }
 
-  Widget _placeholder() => const DecoratedBox(
+  Widget _placeholder() => DecoratedBox(
         decoration: BoxDecoration(gradient: AppColors.placeholderGradient),
         child: Icon(
           Icons.restaurant_menu_rounded,
@@ -182,13 +182,13 @@ class _ArcPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       // A sweep gradient makes the arc fade out along its tail, which reads as
       // motion even in a single frame.
-      ..shader = const SweepGradient(
+      ..shader = SweepGradient(
         colors: <Color>[
-          Color(0x008B5E3C),
+          const Color(0x008B5E3C),
           AppColors.secondary,
           AppColors.primary,
         ],
-        stops: <double>[0, 0.6, 1],
+        stops: const <double>[0, 0.6, 1],
       ).createShader(rect);
 
     // Three-quarters of a turn, leaving a gap so the rotation is visible.

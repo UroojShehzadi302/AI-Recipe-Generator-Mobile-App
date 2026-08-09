@@ -78,7 +78,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        title: const Text('Change Password', style: AppTextStyles.title),
+        title: Text('Change Password', style: AppTextStyles.title),
       ),
       body: SafeArea(
         top: false,

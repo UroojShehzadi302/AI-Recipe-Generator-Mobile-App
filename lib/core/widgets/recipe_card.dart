@@ -291,7 +291,7 @@ class RecipeCard extends StatelessWidget {
   static const double _imageAspect = 16 / 11;
 
   Widget _loading() {
-    return const ColoredBox(
+    return ColoredBox(
       color: AppColors.surfaceAlt,
       child: Center(
         child: SizedBox(
@@ -307,9 +307,9 @@ class RecipeCard extends StatelessWidget {
   }
 
   Widget _placeholder() {
-    return const DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(gradient: AppColors.placeholderGradient),
-      child: Center(
+      child: const Center(
         child: Icon(
           Icons.restaurant_menu_rounded,
           color: Color(0xB3FFFFFF), // white @ 70%

@@ -20,11 +20,11 @@ Future<void> showAppAboutDialog(BuildContext context) {
           Container(
             width: 36,
             height: 36,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: AppColors.brandGradient,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.restaurant_menu_rounded,
               color: AppColors.onPrimary,
               size: AppDimensions.iconMd,
@@ -34,14 +34,14 @@ Future<void> showAppAboutDialog(BuildContext context) {
           const Expanded(child: Text(AppStrings.appName)),
         ],
       ),
-      content: const Column(
+      content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(AppStrings.tagline, style: AppTextStyles.bodyMedium),
-          SizedBox(height: AppDimensions.spaceS),
+          const SizedBox(height: AppDimensions.spaceS),
           Text(AppStrings.aboutBody, style: AppTextStyles.subtitle),
-          SizedBox(height: AppDimensions.spaceM),
+          const SizedBox(height: AppDimensions.spaceM),
           Text('Version $kAppVersion', style: AppTextStyles.caption),
         ],
       ),

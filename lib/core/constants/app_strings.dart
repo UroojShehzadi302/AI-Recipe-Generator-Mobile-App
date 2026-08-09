@@ -115,6 +115,15 @@ class AppStrings {
   static const String notificationsSubtitle =
       'Collect pushed messages in your in-app inbox and badge the bell. System '
       'tray notifications are controlled by your Android settings.';
+  // Appearance / theme.
+  static const String appearance = 'Appearance';
+  static const String themeSystem = 'System';
+  static const String themeLight = 'Light';
+  static const String themeDark = 'Dark';
+  static const String themeSystemSubtitle = 'Match my device';
+  static const String themeLightSubtitle = 'Always light';
+  static const String themeDarkSubtitle = 'Always dark';
+
   static const String privacyPolicy = 'Privacy Policy';
   static const String termsOfService = 'Terms of Service';
   static const String aboutApp = 'About $appName';

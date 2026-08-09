@@ -211,7 +211,7 @@ class _SavedScreenState extends State<SavedScreen> {
                       : AppTextStyles.body,
                 ),
                 trailing: option == _sort
-                    ? const Icon(Icons.check_rounded,
+                    ? Icon(Icons.check_rounded,
                         color: AppColors.primary)
                     : null,
                 onTap: () => Navigator.pop(sheetContext, option),
@@ -383,7 +383,7 @@ class _SearchField extends StatelessWidget {
       style: AppTextStyles.body,
       decoration: InputDecoration(
         hintText: AppStrings.searchSavedHint,
-        prefixIcon: const Icon(
+        prefixIcon: Icon(
           Icons.search_rounded,
           color: AppColors.textSecondary,
           size: AppDimensions.iconMd,
@@ -400,11 +400,11 @@ class _SearchField extends StatelessWidget {
         // fields used for data entry.
         enabledBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brPill,
-          borderSide: const BorderSide(color: AppColors.border, width: 1.2),
+          borderSide: BorderSide(color: AppColors.border, width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brPill,
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.6),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.6),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppDimensions.spaceL,
