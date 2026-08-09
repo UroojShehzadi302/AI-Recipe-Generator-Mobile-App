@@ -1,4 +1,4 @@
-package com.example.ai_recipe_generator
+package com.urooj.cookmate
 
 import io.flutter.embedding.android.FlutterActivity
 

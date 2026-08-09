@@ -52,9 +52,13 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // ⚠️ appId is per registered Android app, so it changes with the package
+  // name. This one belongs to com.urooj.cookmate (renamed 2026-08-04). It must
+  // match the mobilesdk_app_id in android/app/google-services.json for that
+  // package — a stale id here still boots Firebase but breaks Google Sign-In.
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDSxFwgjwBooVBvD_2CIeGIeFmx1rrSCoo',
-    appId: '1:845885648760:android:e53a89769a917208ff228d',
+    appId: '1:845885648760:android:b9b3a973a5488775ff228d',
     messagingSenderId: '845885648760',
     projectId: 'ai-recipe-generator-db27c',
     storageBucket: 'ai-recipe-generator-db27c.firebasestorage.app',

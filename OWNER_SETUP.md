@@ -105,13 +105,54 @@ Back the `.jks` file up somewhere safe and offline.
 
 ---
 
+## Renaming the Android package — the 4-place checklist
+
+The app ships as **`com.urooj.cookmate`** (renamed 2026-08-04). If it ever has to
+change again, the name lives in **four** places. Miss one and the app still
+builds, still runs, and then fails at sign-in — which is exactly what happened
+during the 2026-08-04 rename.
+
+| # | Where | What to change |
+|---|---|---|
+| 1 | `android/app/build.gradle.kts` | `namespace` + `applicationId` |
+| 2 | `android/app/google-services.json` | Register the new app in Firebase, add **both** SHA-1s, re-download |
+| 3 | `lib/firebase_options.dart` | `appId` — it is **per Android app**, so a rename invalidates it |
+| 4 | **Google Cloud Console → API key restriction** | Add the new package + SHA-1 to the key's *Android apps* list |
+
+**#4 is the one that gets missed** — it is not a Firebase setting, it is not in
+`firebase-tools`, and nothing in the repo points at it. It cost a full debugging
+session on 2026-08-04.
+
+- **Symptom:** Google Sign-In fails with
+  `An internal error has occurred. [ Requests from this Android client application com.urooj.cookmate are blocked. ]`
+  and FCM logs `FCM Registration failed!`. **Both at once**, because both
+  authenticate with the same `apiKey` from `firebase_options.dart`.
+- **Neither message names the API key**, which is what makes it hard to find.
+- **Fix:** [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials?project=ai-recipe-generator-db27c)
+  → the key whose *Restrictions* column reads **"Android apps"** (the other keys
+  have no app restriction and cannot cause this) → **Application restrictions →
+  Android apps → ADD AN ITEM** → package name + SHA-1 → **SAVE**. Add, don't
+  replace. Allow ~5 minutes to propagate. No rebuild needed.
+- Add the **release** keystore's SHA-1 there too, or release builds hit the same
+  wall after debug builds work.
+
+Two more consequences of any rename:
+
+- **Old FCM tokens die.** The token is per app install, and Android treats a new
+  package as a different app. Grab a fresh one from logcat; console sends to a
+  stale token fail silently.
+- **No in-place update** from an old install — uninstall/reinstall on test
+  devices. Firestore data and accounts are unaffected (they are project-level).
+
+---
+
 ## Notes / deferred (not blocking)
 
 - **Cloud Storage**: intentionally **not used** (Firebase now needs Blaze for it).
   Avatars are stored as base64 in Firestore — free, no action needed.
-- **Package name** is still the default `com.example.ai_recipe_generator`. Do **not**
-  rename now — it would break the `google-services.json` / Google Sign-In. Rename
-  only at a real production cutover (new Firebase app + SHA-1 + re-download config).
+- **Package name**: ✅ renamed to `com.urooj.cookmate` (2026-08-04) off the
+  `com.example.` default, which Play will not accept. Done — see the rename
+  checklist below if it ever has to change again.
 - **M3 / Cloud Functions** is the production path (App Check, rate limits, key never
   ships) — deferred; dev deliberately avoids Blaze.
 - **Privacy Policy + Terms URLs** are still needed for the Play Store listing (any

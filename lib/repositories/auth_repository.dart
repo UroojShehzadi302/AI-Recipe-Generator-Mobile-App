@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/error/error_mapper.dart';
@@ -388,12 +389,24 @@ class AuthRepository {
           e.code == GoogleSignInExceptionCode.interrupted) {
         return null;
       }
+      if (kDebugMode) {
+        debugPrint('Google sign-in failed: code=${e.code} details=${e.details}');
+      }
       throw AuthFailure(_googleFailureMessage(e));
     } on FirebaseAuthException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Google sign-in Firebase error: ${e.code} — ${e.message}');
+      }
       throw AuthFailure(_authFailureMessage(e));
     } on Failure {
       rethrow;
     } catch (e) {
+      // The generic mapper collapses everything into "something went wrong",
+      // which is right for users and useless for diagnosis — an OAuth
+      // misconfiguration looks identical to a dead network. Log the real cause.
+      if (kDebugMode) {
+        debugPrint('Google sign-in unexpected error (${e.runtimeType}): $e');
+      }
       throw UnknownFailure(ErrorMapper.generic(e));
     }
   }
