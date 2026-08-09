@@ -37,6 +37,14 @@ migrate_working_dir/
 # Commit env.example.json as the template; never commit the real key.
 env.json
 
+# Upload/release signing keystore. Leaking this lets anyone ship an update
+# signed as this app, and Play will not let you change the key afterwards —
+# it is unrecoverable, not merely sensitive. android/.gitignore already covers
+# android/key.properties; these patterns cover the keystore itself wherever it
+# is placed.
+*.jks
+*.keystore
+
 # Symbolication related
 app.*.symbols
 
