@@ -168,16 +168,6 @@ class AppStrings {
   // that collects an email address, so verify both open in a browser before
   // submitting the listing. If the repo is ever renamed or moved, these two
   // strings must move with it.
-  // ---- Debug-only (TEMPORARY) ----
-  // ⚠️ Used exclusively by the `kDebugMode` block in settings_screen.dart, which
-  // is tree-shaken out of release builds. Delete these three alongside that
-  // block once Crashlytics has been confirmed working end-to-end.
-  static const String debugGroup = 'Debug (development only)';
-  static const String debugSendTestReport = 'Send test crash report';
-  static const String debugForceCrash = 'Force a crash (app will close)';
-  static const String debugReportSent =
-      'Test report sent. Relaunch the app, then check Firebase → Crashlytics.';
-
   static const String privacyPolicyUrl =
       'https://uroojshehzadi302.github.io/AI-Recipe-Generator-Mobile-App/privacy-policy.html';
 

@@ -37,13 +37,20 @@
 // not optional, because this app ships with R8 and that plugin uploads the
 // obfuscation mapping file. Without it every release stack trace is unreadable.
 //
-// ⚠️ OWNER STEP OUTSTANDING: reports have nowhere to land until Crashlytics is
-// enabled in the Firebase console (Release & Monitor → Crashlytics) for the
-// **com.urooj.cookmate** app — two stale Android apps are also registered in
-// this project, so pick carefully. Free plan; no Blaze needed. Crashlytics
-// batches, so a crash uploads on the NEXT launch: relaunch before concluding it
-// is broken. To force one from a debug build:
-// `FirebaseCrashlytics.instance.crash();`
+// ✅ VERIFIED END-TO-END on 2026-08-09: a forced crash reached the console as a
+// fresh issue against com.urooj.cookmate v1.0.0. The temporary debug rows in
+// settings_screen.dart that proved it have been removed.
+//
+// Two things learned doing that, worth keeping:
+//   * A plain Dart `throw` will NOT produce a fatal crash in this app.
+//     `main.dart` installs FlutterError.onError and PlatformDispatcher.onError
+//     so isolated failures are contained, which means a throw is caught,
+//     funnelled through _reportError, and filed as NON-fatal — the app stays
+//     open. `FirebaseCrashlytics.instance.crash()` crashes the native layer
+//     beneath Dart, which is what the console's "waiting for a crash" banner
+//     actually wants.
+//   * Reports upload on the NEXT launch, not the one that crashed. Relaunch
+//     before concluding anything is broken.
 //
 // Optional follow-up, not wired: call `CrashReporter.report.setUserId(uid)` on
 // sign-in and `setUserId(null)` on sign-out from `AuthProvider` to correlate
