@@ -17,6 +17,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/app_notification.dart';
 import '../services/notification_service.dart';
 import '../services/notification_store.dart';
+import '../services/settings_store.dart';
 
 /// Exposes received push notifications and their unread state to the UI.
 class NotificationProvider extends ChangeNotifier {
@@ -34,6 +35,13 @@ class NotificationProvider extends ChangeNotifier {
   bool _initialized = false;
   String? _token;
 
+  /// Whether the user wants notifications collected in the in-app inbox.
+  ///
+  /// Seeded optimistically from [SettingsStore.notificationsDefault] so the
+  /// Settings switch renders in the right position on the very first frame,
+  /// then replaced by the stored value once [loadPreferences] resolves.
+  bool _notificationsEnabled = SettingsStore.notificationsDefault;
+
   StreamSubscription<RemoteMessage>? _onMessageSub;
   StreamSubscription<RemoteMessage>? _onOpenedSub;
 
@@ -50,12 +58,54 @@ class NotificationProvider extends ChangeNotifier {
   /// paste this into the Firebase console to target this device directly.
   String? get token => _token;
 
+  /// Whether the user wants to receive notifications (drives the Settings
+  /// switch). See [setNotificationsEnabled] for exactly what turning this off
+  /// does — and does not — stop.
+  bool get notificationsEnabled => _notificationsEnabled;
+
+  /// Reads the stored notifications preference into memory.
+  ///
+  /// Called by [init] and again by the Settings screen on open, so a value
+  /// written by another isolate is picked up. Never throws.
+  Future<void> loadPreferences() async {
+    final bool enabled = await SettingsStore.notificationsEnabled();
+    if (enabled == _notificationsEnabled) return;
+    _notificationsEnabled = enabled;
+    notifyListeners();
+  }
+
+  /// Turns the in-app notifications inbox on or off, and persists the choice.
+  ///
+  /// ⚠️ **This is a LOCAL preference, not an FCM unsubscribe.** This app is
+  /// receive-only: the owner sends from the Firebase console targeting a device
+  /// **token**, and there is no topic subscription to leave. Nothing the client
+  /// can do stops FCM from delivering, so the **Android system tray will still
+  /// show a pushed notification even when this is off** — the OS renders those
+  /// before the app is consulted. Genuinely silencing the tray is an OS-level
+  /// choice (long-press the notification → turn off the channel), which is why
+  /// the Settings copy says so rather than implying more than we deliver.
+  ///
+  /// What it does control, honestly: while off, incoming messages are dropped
+  /// instead of being added to the in-app inbox, so the bell stops badging and
+  /// the list stops growing.
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    if (_notificationsEnabled == enabled) return;
+    _notificationsEnabled = enabled;
+    notifyListeners();
+    await SettingsStore.setNotificationsEnabled(enabled);
+  }
+
   /// One-time initialization: requests permission, resolves the FCM token, and
   /// subscribes to the foreground + tap-to-open message streams. Safe to call
   /// more than once (subsequent calls are no-ops). Never throws.
   Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
+
+    // Resolve the user's preference before subscribing, so a message arriving
+    // immediately after launch is judged against the stored value rather than
+    // the optimistic default.
+    await loadPreferences();
 
     // Restore the inbox from disk BEFORE subscribing, so notifications from
     // previous sessions (including ones the background isolate stored while the
@@ -132,6 +182,10 @@ class NotificationProvider extends ChangeNotifier {
   /// the FCM background isolate may have appended notifications to the store
   /// that this (separate) isolate's in-memory list knows nothing about.
   Future<void> refresh() async {
+    // Another isolate may have written the preference since we last read it.
+    await loadPreferences();
+    if (!_notificationsEnabled) return;
+
     final List<AppNotification> stored = await NotificationStore.load();
     if (stored.isEmpty) return;
 
@@ -153,7 +207,11 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   /// Adds a notification to the top of the inbox, de-duplicating by id.
+  ///
+  /// Drops the message entirely when the user has notifications switched off —
+  /// this is the one place the preference is enforced on the receive path.
   void _add(AppNotification notification) {
+    if (!_notificationsEnabled) return;
     // Message content is user-facing data — debug builds only.
     if (kDebugMode) {
       debugPrint(

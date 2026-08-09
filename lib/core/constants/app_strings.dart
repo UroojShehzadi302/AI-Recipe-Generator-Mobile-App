@@ -102,6 +102,65 @@ class AppStrings {
       'replies use more. Counts come from the AI provider and are for your '
       'reference only.';
 
+  // ---- Settings ----
+  static const String settings = 'Settings';
+  static const String settingsPreferences = 'Preferences';
+  static const String settingsAboutGroup = 'About';
+  static const String settingsAccountGroup = 'Account';
+  static const String notifications = 'Notifications';
+
+  /// Deliberately precise. The app is receive-only and cannot unsubscribe from
+  /// FCM, so the switch controls the in-app inbox — claiming it stops every
+  /// notification would be a lie the Android tray immediately exposes.
+  static const String notificationsSubtitle =
+      'Collect pushed messages in your in-app inbox and badge the bell. System '
+      'tray notifications are controlled by your Android settings.';
+  static const String privacyPolicy = 'Privacy Policy';
+  static const String termsOfService = 'Terms of Service';
+  static const String aboutApp = 'About $appName';
+
+  /// Shown when a link cannot be opened for the user (no `url_launcher`
+  /// dependency in this build — see [privacyPolicyUrl]).
+  static const String linkDialogBody =
+      'Open this link in your browser:';
+  static const String linkCopy = 'Copy link';
+  static const String linkCopied = 'Link copied';
+
+  // ---- External URLs ----
+  // TODO(owner): replace both with the real hosted URLs. The Privacy Policy and
+  // Terms were hosted on 2026-08-04 as store-listing fields; paste the same two
+  // addresses here so the in-app links point at them. Until then these
+  // placeholders are shown verbatim in the link dialog.
+  /// TODO(owner): PLACEHOLDER — replace with the hosted Privacy Policy URL.
+  static const String privacyPolicyUrl =
+      'https://example.com/cookmate-ai/privacy';
+
+  /// TODO(owner): PLACEHOLDER — replace with the hosted Terms of Service URL.
+  static const String termsUrl = 'https://example.com/cookmate-ai/terms';
+
+  // ---- Share ----
+  // Section labels for the plain-text recipe built by `RecipeShareText`.
+  // These end up in someone else's messaging app, so they are written to read
+  // as a message rather than as UI chrome.
+  static const String share = 'Share';
+  static const String shareUntitledRecipe = 'Untitled recipe';
+  static const String shareTimeLabel = 'Time';
+  static const String shareMinutesSuffix = 'min';
+  static const String shareServesLabel = 'Serves';
+  static const String shareCaloriesLabel = 'Calories';
+  static const String shareIngredientsHeading = 'Ingredients';
+  static const String shareInstructionsHeading = 'Instructions';
+
+  /// Closing line on every shared recipe — what makes a forwarded message
+  /// traceable back to the app.
+  static const String shareAttribution = 'Shared from $appName — $tagline';
+
+  /// Confirmation shown when the OS share sheet could not be opened and the
+  /// recipe was put on the clipboard instead. Worded so the user knows exactly
+  /// where the text went rather than assuming the share failed outright.
+  static const String shareCopiedToClipboard = 'Recipe copied to clipboard';
+  static const String shareFailed = 'Could not share this recipe';
+
   // ---- Generic actions ----
   static const String cancel = 'Cancel';
   static const String close = 'Close';

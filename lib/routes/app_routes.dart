@@ -12,6 +12,7 @@ import '../screens/main_shell.dart';
 import '../screens/recipe_detail_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/search_screen.dart';
+import '../screens/settings_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/usage_screen.dart';
 
@@ -74,6 +75,10 @@ class AppRoutes {
         return _page(const HistoryScreen(), settings);
       case usage:
         return _page(const UsageScreen(), settings);
+      // Qualified as `AppRoutes.settings` because the bare `settings` name is
+      // shadowed here by this method's own [RouteSettings] parameter.
+      case AppRoutes.settings:
+        return _page(const SettingsScreen(), settings);
       case category:
         final args = settings.arguments;
         if (args is String) {

@@ -8,6 +8,7 @@ import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
 import '../core/utils/responsive.dart';
+import '../core/widgets/about_dialog.dart';
 import '../core/widgets/primary_button.dart';
 import '../core/widgets/profile_avatar.dart';
 import '../providers/auth_provider.dart';
@@ -32,7 +33,10 @@ class ProfileScreen extends StatefulWidget {
   final ValueChanged<int>? onNavigateTab;
 
   /// The app version shown in the footer + About dialog (matches `pubspec`).
-  static const String appVersion = '1.0.0';
+  ///
+  /// Aliases [kAppVersion] so the footer here and the extracted About dialog
+  /// can never disagree about which version is running.
+  static const String appVersion = kAppVersion;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -110,55 +114,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         );
     }
-  }
-
-  /// A custom About dialog — no "View licenses" button (unlike the framework
-  /// [showAboutDialog]).
-  void _showAbout() {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                gradient: AppColors.brandGradient,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.restaurant_menu_rounded,
-                color: AppColors.onPrimary,
-                size: AppDimensions.iconMd,
-              ),
-            ),
-            const SizedBox(width: AppDimensions.spaceM),
-            const Expanded(child: Text(AppStrings.appName)),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(AppStrings.tagline, style: AppTextStyles.bodyMedium),
-            SizedBox(height: AppDimensions.spaceS),
-            Text(AppStrings.aboutBody, style: AppTextStyles.subtitle),
-            SizedBox(height: AppDimensions.spaceM),
-            Text(
-              'Version ${ProfileScreen.appVersion}',
-              style: AppTextStyles.caption,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(AppStrings.close),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -289,9 +244,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   _MenuRow(
+                    icon: Icons.settings_outlined,
+                    label: AppStrings.settings,
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.settings),
+                  ),
+                  _MenuRow(
                     icon: Icons.info_outline_rounded,
                     label: AppStrings.about,
-                    onTap: _showAbout,
+                    onTap: () => showAppAboutDialog(context),
                   ),
                   _MenuRow(
                     icon: Icons.delete_forever_outlined,

@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/constants/app_strings.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
+import '../core/utils/recipe_share_text.dart';
 import '../core/widgets/favorite_button.dart';
 import '../core/widgets/primary_button.dart';
 import '../models/recipe_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recipe_provider.dart';
+import '../services/platform_share_service.dart';
+import '../services/share_service.dart';
 
 /// Full-detail view for a single [Recipe].
 ///
@@ -63,6 +67,46 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       return;
     }
     await context.read<RecipeProvider>().toggleFavorite(uid, _recipe);
+  }
+
+  /// Shares the recipe as plain text via the platform share sheet.
+  ///
+  /// Composition lives in [RecipeShareText] (pure, testable) and delivery in
+  /// the [ShareService] seam, so this handler only bridges the two and reports
+  /// the outcome. A share that fell back to the clipboard says so explicitly
+  /// rather than claiming success.
+  Future<void> _shareRecipe() async {
+    // `read` inside a callback, not `watch` in build — sharing is stateless and
+    // must never cause a rebuild. `listen: false` keeps this legal here.
+    //
+    // The screen is pushed from seven call sites and built bare in widget
+    // tests, so a missing provider must not crash a tap. Falling back to the
+    // default implementation keeps the seam intact (the type is still
+    // ShareService) while making the lookup total.
+    ShareService shareService;
+    try {
+      shareService = Provider.of<ShareService>(context, listen: false);
+    } on ProviderNotFoundException {
+      shareService = const PlatformShareService();
+    }
+    final String text = RecipeShareText.compose(_recipe);
+
+    final ShareOutcome outcome = await shareService.share(
+      text,
+      subject: _recipe.title.isEmpty ? AppStrings.appName : _recipe.title,
+    );
+
+    if (!mounted) return;
+    switch (outcome) {
+      case ShareOutcome.shared:
+        // The OS sheet is its own confirmation; a snackbar on top of it would
+        // be noise.
+        break;
+      case ShareOutcome.copiedToClipboard:
+        _snack(AppStrings.shareCopiedToClipboard);
+      case ShareOutcome.failed:
+        _snack(AppStrings.shareFailed);
+    }
   }
 
   Future<void> _saveRecipe() async {
@@ -461,7 +505,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               ),
               const SizedBox(width: AppDimensions.spaceM),
               _ShareButton(
-                onPressed: () => _snack('Share coming soon'),
+                onPressed: _shareRecipe,
               ),
             ],
           ),
