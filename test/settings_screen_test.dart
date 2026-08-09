@@ -9,6 +9,7 @@
 import 'package:ai_recipe_generator/core/constants/app_strings.dart';
 import 'package:ai_recipe_generator/providers/auth_provider.dart';
 import 'package:ai_recipe_generator/providers/notification_provider.dart';
+import 'package:ai_recipe_generator/providers/text_scale_provider.dart';
 import 'package:ai_recipe_generator/providers/theme_provider.dart';
 import 'package:ai_recipe_generator/repositories/auth_repository.dart';
 import 'package:ai_recipe_generator/repositories/user_repository.dart';
@@ -73,6 +74,11 @@ Widget _wrap(
       // The Appearance row reads this. Constructed plainly rather than via
       // ThemeProvider.load() so no binding or stored preference is needed.
       ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
+      // The Text Size row reads this, and for the same reason as above it is
+      // constructed plainly — no binding, no stored preference.
+      ChangeNotifierProvider<TextScaleProvider>(
+        create: (_) => TextScaleProvider(),
+      ),
     ],
     child: const MaterialApp(home: SettingsScreen()),
   );

@@ -17,6 +17,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../providers/text_scale_provider.dart' show AppTextScale;
+
 /// Reads and writes the user's on-device settings.
 class SettingsStore {
   SettingsStore._();
@@ -110,6 +112,36 @@ class SettingsStore {
         return _dark;
       case ThemeMode.system:
         return _system;
+    }
+  }
+
+  /// SharedPreferences key for the text size preference.
+  static const String textScaleKey = 'settings_text_scale';
+
+  /// The user's saved text size, defaulting to [AppTextScale.medium].
+  ///
+  /// Stored by stable name for exactly the reason [loadThemeMode] is: an enum
+  /// index would silently change meaning if the enum were ever reordered, so a
+  /// user who chose "Large" could be upgraded into "Small". An unrecognised
+  /// value falls back to medium — the size the app shipped with.
+  static Future<AppTextScale> loadTextScale() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      return AppTextScale.fromName(prefs.getString(textScaleKey));
+    } catch (e) {
+      debugPrint('SettingsStore.loadTextScale failed: $e');
+      return AppTextScale.medium;
+    }
+  }
+
+  /// Persists the text size choice.
+  static Future<void> saveTextScale(AppTextScale scale) async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(textScaleKey, scale.storageName);
+    } catch (e) {
+      debugPrint('SettingsStore.saveTextScale failed: $e');
     }
   }
 }

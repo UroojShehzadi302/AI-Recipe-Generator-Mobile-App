@@ -7,6 +7,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
+import '../core/utils/app_image_cache.dart';
 import '../core/utils/responsive.dart';
 import '../core/widgets/app_error_view.dart';
 import '../core/widgets/empty_state.dart';
@@ -350,10 +351,14 @@ class _HistoryTile extends StatelessWidget {
                   size: AppDimensions.iconMd,
                 ),
               )
-            : Image.network(
-                entry.recipe.imageUrl,
+            : Image(
+                // Disk-backed; `size` is a fixed thumbnail dimension, so the
+                // decode width is always finite here.
+                image: cachedNetworkImage(
+                  entry.recipe.imageUrl,
+                  cacheWidth: (size * 3).round(),
+                ),
                 fit: BoxFit.cover,
-                cacheWidth: (size * 3).round(),
                 errorBuilder: (_, _, _) => DecoratedBox(
                   decoration:
                       BoxDecoration(gradient: AppColors.placeholderGradient),

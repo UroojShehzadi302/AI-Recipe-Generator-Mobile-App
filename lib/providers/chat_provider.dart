@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_strings.dart';
 import '../core/error/failure.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../repositories/chat_repository.dart';
+import 'connectivity_provider.dart';
 
 /// [ChangeNotifier] that drives the AI Chat screen.
 ///
@@ -16,8 +18,35 @@ class ChatProvider extends ChangeNotifier {
   /// The repository used to send messages and (optionally) persist history.
   final ChatRepository _repository;
 
+  /// Optional connectivity tracker. Injected rather than looked up so this
+  /// provider stays constructible in a plain unit test with nothing wired.
+  final ConnectivityProvider? _connectivity;
+
   /// Creates a [ChatProvider] backed by [repository].
-  ChatProvider(ChatRepository repository) : _repository = repository;
+  ///
+  /// [connectivity], when supplied, is told about transport-level outcomes so a
+  /// send that failed while offline can say so instead of showing a generic
+  /// error.
+  ChatProvider(
+    ChatRepository repository, {
+    ConnectivityProvider? connectivity,
+  })  : _repository = repository,
+        // `this._connectivity` is not usable here: a named parameter derived
+        // from a private field is un-passable from another library, and
+        // app.dart constructs this provider.
+        // ignore: prefer_initializing_formals
+        _connectivity = connectivity;
+
+  /// Rewords a send failure when the device is CONFIRMED offline.
+  ///
+  /// Only substitutes on [ConnectivityProvider.isOffline] — a failed request a
+  /// probe agreed with. A merely-suspected outage keeps the original message,
+  /// because telling a user with working Wi-Fi that they have no internet sends
+  /// them to fix the wrong thing.
+  String _offlineAwareMessage(String fallback) {
+    if (_connectivity?.isOffline ?? false) return AppStrings.offlineAiError;
+    return fallback;
+  }
 
   final List<ChatMessage> _messages = <ChatMessage>[];
   bool _isSending = false;
@@ -74,9 +103,20 @@ class ChatProvider extends ChangeNotifier {
       final List<ChatMessage> history =
           _messages.sublist(0, _messages.length - 1);
       final String reply = await _repository.send(trimmed, history: history);
+      // A reply came back, so the connection demonstrably works — this clears
+      // any stale offline state at zero network cost.
+      _connectivity?.reportSuccess();
       botMessage = ChatMessage.bot(reply);
       _messages.add(botMessage);
+    } on NetworkFailure catch (failure) {
+      // The only branch that is real evidence of a transport problem. Report it
+      // (the service confirms with a probe), then word the bubble accordingly.
+      _connectivity?.reportFailure();
+      _errorMessage = _offlineAwareMessage(failure.message);
+      _messages.add(ChatMessage.bot(_errorMessage!));
     } on Failure catch (failure) {
+      // Reached the service and came back wrong (quota, blocked, bad response).
+      // Not a connectivity signal — the request clearly got through.
       _errorMessage = failure.message;
       _messages.add(ChatMessage.bot(failure.message));
     } catch (e) {

@@ -7,8 +7,10 @@ import '../core/theme/app_scroll_behavior.dart';
 import '../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/recipe_provider.dart';
+import '../providers/text_scale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/usage_provider.dart';
 import '../repositories/auth_repository.dart';
@@ -19,11 +21,13 @@ import '../repositories/user_repository.dart';
 import '../routes/app_routes.dart';
 import '../services/ai_service.dart';
 import '../services/auth_service.dart';
+import '../services/connectivity_service.dart';
 import '../services/firestore_service.dart';
 import '../services/gemini_direct_service.dart';
 import '../services/meal_db_service.dart';
 import '../services/notification_service.dart';
 import '../services/platform_share_service.dart';
+import '../services/probe_connectivity_service.dart';
 import '../services/share_service.dart';
 import '../services/unconfigured_ai_service.dart';
 
@@ -38,6 +42,7 @@ class RecipeGeneratorApp extends StatelessWidget {
     super.key,
     required this.aiConfig,
     this.themeProvider,
+    this.textScaleProvider,
   });
 
   /// AI key/model resolved at startup by [AiConfig.load] (from `env.json`).
@@ -48,6 +53,12 @@ class RecipeGeneratorApp extends StatelessWidget {
   /// itself. Optional: tests and any caller that does not care get a default
   /// system-mode controller.
   final ThemeProvider? themeProvider;
+
+  /// The text size controller, pre-loaded in `main()` for the same reason
+  /// [themeProvider] is: resolving it after the first frame would render one
+  /// frame at the default size and then reflow the whole app. Optional — tests
+  /// and any caller that does not care get a default medium controller.
+  final TextScaleProvider? textScaleProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +73,13 @@ class RecipeGeneratorApp extends StatelessWidget {
     // line to a `share_plus`-backed implementation later leaves the UI
     // untouched — RecipeDetailScreen depends on the ShareService interface.
     const ShareService shareService = PlatformShareService();
+
+    // Connectivity. Dependency-free: it learns from the app's OWN request
+    // failures and confirms with a DNS lookup, so in the normal case it makes
+    // no network call at all. Swapping this one line to a `connectivity_plus`-
+    // backed implementation later leaves the provider, the banner, and every
+    // screen untouched — see the TODO box in probe_connectivity_service.dart.
+    final ConnectivityService connectivityService = ProbeConnectivityService();
 
     // Usage accounting. Built before the AI service because it IS the sink the
     // service reports token costs to. The uid is read lazily per call (rather
@@ -90,6 +108,13 @@ class RecipeGeneratorApp extends StatelessWidget {
     final chatRepository = ChatRepository(ai: aiService);
 
     // --- Providers (UI state) ---
+    //
+    // Built here rather than inside the MultiProvider entry below because the
+    // two AI providers need the SAME instance: they feed request outcomes into
+    // it (which is how the app detects an outage for free) and read its verdict
+    // to word their errors. A `create:` closure would be lazy and could hand
+    // out a second instance.
+    final connectivityProvider = ConnectivityProvider(connectivityService);
     return MultiProvider(
       providers: [
         // Plain value, not a ChangeNotifier: sharing is stateless, so nothing
@@ -99,10 +124,16 @@ class RecipeGeneratorApp extends StatelessWidget {
           create: (_) => AuthProvider(authRepository),
         ),
         ChangeNotifierProvider<RecipeProvider>(
-          create: (_) => RecipeProvider(recipeRepository),
+          create: (_) => RecipeProvider(
+            recipeRepository,
+            connectivity: connectivityProvider,
+          ),
         ),
         ChangeNotifierProvider<ChatProvider>(
-          create: (_) => ChatProvider(chatRepository),
+          create: (_) => ChatProvider(
+            chatRepository,
+            connectivity: connectivityProvider,
+          ),
         ),
         ChangeNotifierProvider<UsageProvider>(
           create: (_) => UsageProvider(usageRepository),
@@ -115,12 +146,27 @@ class RecipeGeneratorApp extends StatelessWidget {
         ChangeNotifierProvider<ThemeProvider>(
           create: (_) => themeProvider ?? ThemeProvider(),
         ),
+        // `.value` because the instance is shared with the two AI providers
+        // above — see the note where it is constructed. MultiProvider does not
+        // dispose a `.value` notifier, which is correct here: this one lives as
+        // long as the app does.
+        ChangeNotifierProvider<ConnectivityProvider>.value(
+          value: connectivityProvider,
+        ),
+        ChangeNotifierProvider<TextScaleProvider>(
+          create: (_) => textScaleProvider ?? TextScaleProvider(),
+        ),
       ],
-      // Watches ThemeProvider so a theme change rebuilds MaterialApp. Without
-      // this the widget would be built once and the app would keep the theme it
-      // started with.
-      child: Consumer<ThemeProvider>(
-        builder: (BuildContext context, ThemeProvider themeProvider, _) {
+      // Watches both display preferences so a change to either rebuilds
+      // MaterialApp. Without this the widget would be built once and the app
+      // would keep whatever theme and text size it started with.
+      child: Consumer2<ThemeProvider, TextScaleProvider>(
+        builder: (
+          BuildContext context,
+          ThemeProvider themeProvider,
+          TextScaleProvider textScale,
+          _,
+        ) {
           // Keep the global palette in step with the OS when following the
           // system theme. MaterialApp rebuilds on a platform brightness change
           // but AppPalette is not reactive, so it has to be re-resolved here —
@@ -139,6 +185,26 @@ class RecipeGeneratorApp extends StatelessWidget {
             // stretch overscroll indicator, so every list feels the same
             // without each scrollable setting `physics:` itself.
             scrollBehavior: const AppScrollBehavior(),
+            // Applies the user's text size to every Text in the app — including
+            // Material's own dialogs, snackbars and tooltips, which never touch
+            // AppTextStyles. `builder` runs INSIDE MaterialApp, above the
+            // navigator, so routes and overlays (dialogs, bottom sheets) all
+            // inherit it; wrapping MaterialApp from the outside would leave
+            // anything pushed onto the root overlay unscaled.
+            //
+            // The scaler already in the tree here is the OS setting, and it is
+            // multiplied rather than replaced — see TextScaleProvider for why
+            // that is the accessible choice, and for the clamp that keeps the
+            // product from compounding into an unusable size.
+            builder: (BuildContext context, Widget? child) {
+              final MediaQueryData media = MediaQuery.of(context);
+              return MediaQuery(
+                data: media.copyWith(
+                  textScaler: textScale.scalerFor(media.textScaler),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             initialRoute: AppRoutes.splash,
             onGenerateRoute: AppRoutes.onGenerateRoute,
           );

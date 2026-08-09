@@ -7,8 +7,11 @@ import 'package:flutter/material.dart';
 
 import 'app/app.dart';
 import 'core/config/ai_config.dart';
+import 'core/utils/app_image_cache.dart';
 import 'firebase_options.dart';
+import 'providers/text_scale_provider.dart';
 import 'providers/theme_provider.dart';
+import 'services/crash_reporter.dart';
 import 'services/notification_service.dart';
 import 'services/notification_store.dart';
 
@@ -61,6 +64,12 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
+      // Size the in-memory decoded-image cache for a budget Android phone.
+      // Must run after the binding exists (it touches PaintingBinding) and is
+      // cheap, so it goes first. See AppImageCache for the measured reasoning
+      // behind the number — it is not an arbitrary round figure.
+      AppImageCache.configureMemoryCache();
+
       // Framework-level errors (build/layout/paint). In debug, keep Flutter's
       // red-screen behaviour; in release, log and carry on rather than letting
       // an isolated widget failure take down the screen.
@@ -79,6 +88,18 @@ Future<void> main() async {
         options: DefaultFirebaseOptions.currentPlatform,
       );
 
+      // ── Crash reporting (M14) ──────────────────────────────────────────────
+      // Prepared but NOT adopted: no reporting backend is wired, so the default
+      // DebugCrashReporter stays installed (logs in debug, silent in release).
+      // Adopting Crashlytics is ONE line, and it belongs right here — after
+      // Firebase.initializeApp, since the reporter resolves
+      // FirebaseCrashlytics.instance:
+      //
+      //   CrashReporter.instance = CrashlyticsCrashReporter();
+      //
+      // Full checklist (pubspec, Gradle plugin, Firebase console step) is in
+      // the ADOPTION block at the top of services/crash_reporter.dart.
+
       // Register the background message handler (top-level, vm:entry-point)
       // after Firebase is initialized and before runApp. Non-fatal on failure.
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -96,8 +117,16 @@ Future<void> main() async {
             WidgetsBinding.instance.platformDispatcher.platformBrightness,
       );
 
+      // Same reasoning as the theme: resolving the text size after the first
+      // frame would paint once at the default and then reflow every screen.
+      final TextScaleProvider textScaleProvider = await TextScaleProvider.load();
+
       runApp(
-        RecipeGeneratorApp(aiConfig: aiConfig, themeProvider: themeProvider),
+        RecipeGeneratorApp(
+          aiConfig: aiConfig,
+          themeProvider: themeProvider,
+          textScaleProvider: textScaleProvider,
+        ),
       );
     },
     _reportError,
@@ -106,10 +135,18 @@ Future<void> main() async {
 
 /// Single funnel for uncaught errors.
 ///
-/// Today it logs. It is deliberately one function so wiring a crash reporter
-/// (Crashlytics et al.) later is a one-line change here rather than a hunt
-/// through every error site.
+/// It stays one function so every error site — the guarded zone,
+/// `FlutterError.onError`, and `PlatformDispatcher.onError` — reports through
+/// the same path. The path itself is now the [CrashReporter] seam, so adopting
+/// Crashlytics means installing a different reporter in `main()` rather than
+/// editing this function; see the ADOPTION block in `services/crash_reporter.dart`.
+///
+/// Reported as NON-fatal: by the time these handlers run Flutter has already
+/// contained the error and the app is still alive, so flagging a fatal crash
+/// would misreport the app's stability.
+///
+/// The default [DebugCrashReporter] logs in debug and stays silent in release —
+/// byte-for-byte what this function did inline before the seam existed.
 void _reportError(Object error, StackTrace? stack) {
-  debugPrint('UNCAUGHT ERROR: $error');
-  if (stack != null) debugPrint('$stack');
+  CrashReporter.recordErrorSafely(error, stack);
 }

@@ -11,8 +11,19 @@ import '../utils/image_source.dart';
 /// a generic person icon. Kept resilient to broken image URLs so a bad link
 /// never leaves an empty circle.
 ///
-/// TODO(Phase 6): swap plain [NetworkImage] for `cached_network_image` once the
-/// package is added, to get disk caching and placeholder/error widgets.
+/// Caching status (the old `TODO(Phase 6)` is resolved):
+/// * **Disk caching is done**, without a new dependency. `imageProviderFromUrl`
+///   now returns a disk-backed provider for `http(s)` URLs — see
+///   `core/utils/app_image_cache.dart`. In practice this only matters for
+///   Google account photos; a user-set avatar is a `data:` URI already stored
+///   in the Firestore document, so it never touches the network at all.
+/// * **Placeholder/error widgets** were never missing — this widget already
+///   renders an initial or a person icon via `errorBuilder`, which is the
+///   behaviour that TODO was asking for.
+///
+/// So there is nothing left here that `cached_network_image` would add. See the
+/// `TODO(cached_network_image)` box in `services/image_cache_service.dart` for
+/// the one-line migration if the owner ever authorises the package.
 class ProfileAvatar extends StatefulWidget {
   const ProfileAvatar({
     super.key,
