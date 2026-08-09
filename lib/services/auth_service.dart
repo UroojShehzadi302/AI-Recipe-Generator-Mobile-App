@@ -18,9 +18,18 @@ import 'package:google_sign_in/google_sign_in.dart';
 /// `default_web_client_id` resource which the plugin reads automatically. Leave
 /// this empty to rely on that resource; set it to override.
 ///
-/// Until the owner enables the Google provider in the console (and adds the
-/// debug SHA-1), Google sign-in will surface a configuration error on-device.
-const String kGoogleServerClientId = '';
+/// Set explicitly rather than left empty. Relying on the generated resource is
+/// the documented happy path, but it fails silently when it doesn't materialise
+/// — `authenticate()` returns an account with a **null `idToken`**, which
+/// surfaces to the user as a generic "something went wrong" with nothing in the
+/// logs pointing at OAuth config. Naming it here removes that failure mode.
+///
+/// This is the **web** client (`client_type: 3`) from `google-services.json` —
+/// NOT the Android client (`client_type: 1`). Using the Android one yields the
+/// same null-token failure. It is project-wide, so it survived the
+/// com.urooj.cookmate rename; re-check it only if the Firebase project changes.
+const String kGoogleServerClientId =
+    '845885648760-hl2qrl11b3i1hclclrk7kdcitha1a93u.apps.googleusercontent.com';
 
 /// A minimal, testable facade over [FirebaseAuth].
 ///
