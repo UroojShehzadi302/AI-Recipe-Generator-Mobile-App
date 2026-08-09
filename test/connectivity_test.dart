@@ -663,6 +663,57 @@ void main() {
       expect(tester.getSize(find.byType(OfflineBanner)).height, 0);
     });
 
+    testWidgets('reserves nothing for the status bar while online',
+        (tester) async {
+      // Regression: the banner was originally wrapped in a SafeArea inside
+      // MainShell, which padded the status-bar height unconditionally — even
+      // with the banner collapsed to zero. That left an empty white strip
+      // across the top of EVERY screen, which is what shipped and was caught on
+      // a device. The inset now lives on the visible strip, so online pays
+      // nothing.
+      //
+      // The plain-host test above cannot catch this: with no inset there is
+      // nothing for a stray SafeArea to add. This one supplies a real one.
+      final provider = ConnectivityProvider(FakeConnectivityService());
+      addTearDown(provider.dispose);
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            padding: EdgeInsets.only(top: 48),
+          ),
+          child: _hostBanner(provider),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.byType(OfflineBanner)).height, 0);
+    });
+
+    testWidgets('clears the status bar when it is actually showing',
+        (tester) async {
+      // The flip side: the inset must still be paid while visible, or the
+      // message sits under the clock and the notch.
+      final provider =
+          ConnectivityProvider(FakeConnectivityService(ConnectivityStatus.offline));
+      addTearDown(provider.dispose);
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            padding: EdgeInsets.only(top: 48),
+          ),
+          child: _hostBanner(provider),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byType(OfflineBanner)).height,
+        OfflineBanner.height + 48,
+      );
+    });
+
     testWidgets('renders in dark mode without hardcoded colors',
         (tester) async {
       // Tokens resolve through the runtime palette, so the banner must build
