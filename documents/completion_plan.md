@@ -1,7 +1,7 @@
-# AI Recipe Generator — Full Project Completion Plan
+# CookMate AI — Full Project Completion Plan
 
-**Last updated:** 2026-07-10
-**Purpose:** A single roadmap from the current state (clean foundation, ~10% built) to a production-ready, launchable app. Plan only — no code.
+**Last updated:** 2026-08-09 (§0 rewritten against a verified source tree; the M1–M15 roadmap below is unchanged)
+**Purpose:** A single roadmap to a production-ready, launchable app. Plan only — no code.
 **Guiding rules:**
 - Preserve branding (warm brown `#8B5E3C`, cream `#F6F2EE`, logo, login design language).
 - Every screen consumes design tokens — no hardcoded UI values.
@@ -13,11 +13,53 @@
 
 ## 0. Where We Are
 
-- ✅ **Foundation done:** design tokens, theme, reusable widgets, models, validators, error mapping (Phases 0–3). Verified: analyze clean (1 legacy warning), 3/3 tests pass.
-- ⏳ **Not wired in yet:** the new widgets/models are additive; screens still use legacy code.
-- ❌ **Not started:** app architecture (providers/router), all features, all backend/AI wiring.
+> Rewritten 2026-08-09 against a verified tree. The previous version of this section was dated
+> 2026-07-10 and described the project as "~10% built" with app architecture, all features, and all
+> backend/AI wiring "not started". That was badly stale. The detailed done/not-done tracker is
+> `project_status.md`; `CLAUDE.md` at the repo root is the authoritative narrative context.
 
-The plan below continues from here.
+**The app is feature-complete for its documented scope.** Verified: `flutter test` = **136 passing**
+(18 test files); `flutter analyze` = 1 warning + 6 info hints, where the warning
+(`unused_local_variable: shareService`, `lib/app/app.dart:53`) belongs to the Share work in flight
+this session and the info hints are the accepted `prefer_initializing_formals` entries.
+
+**Done:** Foundation · **M1** App Architecture (5 providers, 5 repositories, 10 services, DI in
+`app/app.dart`, `onGenerateRoute` router) · **M4** Authentication (email + Google, device-verified)
+· **M5** Home (live TheMealDB + curated-desi catalog, seed-then-upgrade, pull-to-refresh) ·
+**M6** AI Recipe Generator · **M7** Recipe Detail (except Share — in flight) · **M8** Favorites &
+Saved · **M9** AI Chat (with persisted, AI-titled history) · **M10** Search & Categories ·
+**M11** Profile, Edit Profile, Change Password, Account Deletion (Settings screen in flight).
+Beyond the original plan: push notifications with a persistent inbox, Usage History, Credit Usage
+token tracking, avatar cropping, responsive layouts, and an in-house shimmer.
+
+**In progress this session (status not final — confirm before relying on it):**
+- **Settings screen** — `/settings` is declared but has no route case yet; `settings_store.dart` and
+  a live Profile link have landed ahead of the screen.
+- **Share** — `ShareService` / `PlatformShareService` and the provider registration have landed;
+  `recipe_detail_screen.dart` still shows the `'Share coming soon'` snackbar.
+
+**Genuinely remaining:**
+- **M3** Backend Setup — ❌ **deferred by decision, not by oversight.** Cloud Functions and Cloud
+  Storage both require the Blaze (paid) plan. Per the D7 override, the dev phase calls the free
+  Gemini Developer API directly behind the `AiService` interface, so migrating is one line in
+  `app/app.dart`; avatars are base64 in the Firestore user doc for the same reason. App Check and
+  rate limiting ride along with M3.
+- **M2** Folder migration — ❌ `lib/screens/` is still flat rather than feature-first. Cosmetic.
+  (The dependency half of M2 is effectively settled: several packages it listed were deliberately
+  replaced by in-house code — see `project_status.md` §8.)
+- **M12** Cross-cutting polish — partial. Responsive, animations, and performance work are done;
+  **offline handling** (`connectivity_plus`, Firestore persistence, offline banner) and
+  **image caching** (`cached_network_image`) are not.
+- **M13** Testing — substantially done at the unit/widget level (136 tests); no integration test or
+  formal device matrix.
+- **M14** Production Readiness — privacy/terms hosted, keystore + SHA-1 done, R8 verified;
+  **Crashlytics is not wired** (one-line change at `_reportError`, `lib/main.dart:101`).
+- **M15** Launch — store-listing assets outstanding. The release keystore's SHA-1 still needs adding
+  to the Cloud Console API-key restriction before upload.
+
+Decision gates 2 and 3 below are resolved (Gemini Developer API; no Blaze in dev). Gate 1 (content
+source) and gates 4–6 remain open, though gate 1 no longer blocks M5/M7/M10 — those ship on the
+TheMealDB + curated-desi blend.
 
 ---
 
