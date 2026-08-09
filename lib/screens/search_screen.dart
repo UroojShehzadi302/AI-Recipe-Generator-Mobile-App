@@ -198,11 +198,11 @@ class _SearchScreenState extends State<SearchScreen> {
           child: Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.surface,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back,
               color: AppColors.primary,
               size: 22,
@@ -234,10 +234,10 @@ class _SearchScreenState extends State<SearchScreen> {
           isDense: true,
           hintText: 'Search recipes or ingredients',
           hintStyle: AppTextStyles.subtitle,
-          prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+          prefixIcon: Icon(Icons.search, color: AppColors.textSecondary),
           suffixIcon: hasText
               ? IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                  icon: Icon(Icons.close, color: AppColors.textSecondary),
                   onPressed: _clearField,
                 )
               : null,

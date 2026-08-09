@@ -12,6 +12,7 @@ import '../core/utils/responsive.dart';
 import '../core/widgets/about_dialog.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/theme_provider.dart';
 import '../routes/app_routes.dart';
 
 /// Settings (M11) — preferences, legal links, and account actions.
@@ -51,6 +52,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await context.read<NotificationProvider>().setNotificationsEnabled(enabled);
   }
 
+  static IconData _themeIcon(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return Icons.light_mode_outlined;
+      case ThemeMode.dark:
+        return Icons.dark_mode_outlined;
+      case ThemeMode.system:
+        return Icons.brightness_auto_outlined;
+    }
+  }
+
+  static String _themeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return AppStrings.themeLight;
+      case ThemeMode.dark:
+        return AppStrings.themeDark;
+      case ThemeMode.system:
+        return AppStrings.themeSystem;
+    }
+  }
+
+  /// Opens the light/dark/system picker.
+  ///
+  /// A dialog rather than a switch because there are three states, and
+  /// "follow my device" is a genuinely different intent from "always light" —
+  /// a two-way toggle would force the user to give that up silently.
+  Future<void> _pickTheme() async {
+    final ThemeProvider provider = context.read<ThemeProvider>();
+    final ThemeMode? picked = await showDialog<ThemeMode>(
+      context: context,
+      builder: (BuildContext dialogContext) => SimpleDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppDimensions.brXl),
+        title: Text(AppStrings.appearance, style: AppTextStyles.sectionTitle),
+        children: <Widget>[
+          for (final ThemeMode mode in ThemeMode.values)
+            _ThemeOption(
+              mode: mode,
+              selected: mode == provider.mode,
+              onTap: () => Navigator.pop(dialogContext, mode),
+            ),
+        ],
+      ),
+    );
+
+    if (picked != null) await provider.setMode(picked);
+  }
+
   /// Presents [url] in a copyable dialog.
   ///
   /// ⚠️ TODO(owner): this app has **no `url_launcher` dependency**, and adding
@@ -68,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(AppStrings.linkDialogBody,
+            Text(AppStrings.linkDialogBody,
                 style: AppTextStyles.subtitle),
             const SizedBox(height: AppDimensions.spaceM),
             Container(
@@ -124,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        title: const Text(AppStrings.settings, style: AppTextStyles.title),
+        title: Text(AppStrings.settings, style: AppTextStyles.title),
       ),
       body: SafeArea(
         top: false,
@@ -155,6 +205,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         subtitle: AppStrings.notificationsSubtitle,
                         value: notificationsOn,
                         onChanged: _setNotifications,
+                      ),
+                      _SettingsRow(
+                        icon: _themeIcon(context.watch<ThemeProvider>().mode),
+                        label: AppStrings.appearance,
+                        // The current choice is the useful thing to show here —
+                        // "System" alone is ambiguous, so it names what the
+                        // device is currently resolving to.
+                        trailingText: _themeLabel(
+                          context.watch<ThemeProvider>().mode,
+                        ),
+                        onTap: _pickTheme,
                         isLast: true,
                       ),
                     ],
@@ -315,12 +376,17 @@ class _SettingsRow extends StatelessWidget {
     required this.onTap,
     this.destructive = false,
     this.isLast = false,
+    this.trailingText,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool destructive;
+
+  /// Optional value shown before the chevron — the row's current setting, for
+  /// rows that open a picker rather than navigating somewhere.
+  final String? trailingText;
 
   /// Suppresses the trailing divider on the final row of a group.
   final bool isLast;
@@ -354,6 +420,10 @@ class _SettingsRow extends StatelessWidget {
                           : AppTextStyles.body,
                     ),
                   ),
+                  if (trailingText != null) ...[
+                    Text(trailingText!, style: AppTextStyles.caption),
+                    const SizedBox(width: AppDimensions.spaceXs),
+                  ],
                   Icon(
                     Icons.chevron_right_rounded,
                     color:
@@ -382,7 +452,6 @@ class _SwitchRow extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
-    this.isLast = false,
   });
 
   final IconData icon;
@@ -390,7 +459,6 @@ class _SwitchRow extends StatelessWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
-  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
@@ -432,7 +500,9 @@ class _SwitchRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (!isLast) const _RowDivider(),
+            // The switch row is never last in its group — Appearance follows
+            // it — so the divider is unconditional here.
+            const _RowDivider(),
           ],
         ),
       ),
@@ -446,11 +516,90 @@ class _RowDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Divider(
+    return Divider(
       height: 1,
       thickness: 1,
       indent: 64,
       color: AppColors.borderSoft,
+    );
+  }
+}
+
+/// One row of the appearance picker.
+///
+/// Each mode carries a subtitle because the labels alone are ambiguous —
+/// "System" says nothing about what it will actually do.
+class _ThemeOption extends StatelessWidget {
+  const _ThemeOption({
+    required this.mode,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ThemeMode mode;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (String label, String subtitle, IconData icon) = switch (mode) {
+      ThemeMode.light => (
+          AppStrings.themeLight,
+          AppStrings.themeLightSubtitle,
+          Icons.light_mode_outlined,
+        ),
+      ThemeMode.dark => (
+          AppStrings.themeDark,
+          AppStrings.themeDarkSubtitle,
+          Icons.dark_mode_outlined,
+        ),
+      ThemeMode.system => (
+          AppStrings.themeSystem,
+          AppStrings.themeSystemSubtitle,
+          Icons.brightness_auto_outlined,
+        ),
+    };
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceXl,
+          vertical: AppDimensions.spaceM,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: AppDimensions.iconMd,
+              color: selected ? AppColors.primary : AppColors.textSecondary,
+            ),
+            const SizedBox(width: AppDimensions.spaceM),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: selected
+                        ? AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.primary)
+                        : AppTextStyles.body,
+                  ),
+                  Text(subtitle, style: AppTextStyles.caption),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(
+                Icons.check_rounded,
+                size: AppDimensions.iconMd,
+                color: AppColors.primary,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

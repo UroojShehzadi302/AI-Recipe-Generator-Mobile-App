@@ -122,7 +122,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        title: const Text('Edit Profile', style: AppTextStyles.title),
+        title: Text('Edit Profile', style: AppTextStyles.title),
       ),
       body: SafeArea(
         top: false,
@@ -223,7 +223,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             bottom: 0,
             child: Container(
               padding: const EdgeInsets.all(7),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.primary,
                 shape: BoxShape.circle,
               ),
@@ -246,7 +246,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.mail_outline, color: AppColors.textSecondary, size: 22),
+          Icon(Icons.mail_outline, color: AppColors.textSecondary, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -254,7 +254,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               style: AppTextStyles.subtitle,
             ),
           ),
-          const Icon(Icons.lock_outline, color: AppColors.textSecondary, size: 18),
+          Icon(Icons.lock_outline, color: AppColors.textSecondary, size: 18),
         ],
       ),
     );

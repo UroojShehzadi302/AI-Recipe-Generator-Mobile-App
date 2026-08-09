@@ -9,6 +9,7 @@
 import 'package:ai_recipe_generator/core/constants/app_strings.dart';
 import 'package:ai_recipe_generator/providers/auth_provider.dart';
 import 'package:ai_recipe_generator/providers/notification_provider.dart';
+import 'package:ai_recipe_generator/providers/theme_provider.dart';
 import 'package:ai_recipe_generator/repositories/auth_repository.dart';
 import 'package:ai_recipe_generator/repositories/user_repository.dart';
 import 'package:ai_recipe_generator/screens/settings_screen.dart';
@@ -69,6 +70,9 @@ Widget _wrap(
         ),
       ),
       ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
+      // The Appearance row reads this. Constructed plainly rather than via
+      // ThemeProvider.load() so no binding or stored preference is needed.
+      ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
     ],
     child: const MaterialApp(home: SettingsScreen()),
   );
@@ -166,6 +170,38 @@ void main() {
       await provider.refresh();
       expect(provider.items, isEmpty);
       expect(provider.unreadCount, 0);
+    });
+
+    testWidgets('shows the Appearance row with the current mode', (tester) async {
+      final provider = NotificationProvider(_FakeNotificationService());
+      await tester.pumpWidget(_wrap(provider));
+      await tester.pumpAndSettle();
+
+      expect(find.text(AppStrings.appearance), findsOneWidget);
+      // The row names the active choice — "Appearance" alone would not say
+      // what the app is currently doing.
+      expect(find.text(AppStrings.themeSystem), findsOneWidget);
+    });
+
+    testWidgets('picking a theme updates the row and the provider',
+        (tester) async {
+      final provider = NotificationProvider(_FakeNotificationService());
+      await tester.pumpWidget(_wrap(provider));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(AppStrings.appearance));
+      await tester.pumpAndSettle();
+
+      // All three modes are offered — a two-way switch would silently drop
+      // "follow my device".
+      expect(find.text(AppStrings.themeLight), findsOneWidget);
+      expect(find.text(AppStrings.themeDark), findsOneWidget);
+
+      await tester.tap(find.text(AppStrings.themeDark));
+      await tester.pumpAndSettle();
+
+      expect(find.text(AppStrings.themeDark), findsOneWidget);
+      expect(find.text(AppStrings.themeSystem), findsNothing);
     });
 
     testWidgets('lists the About-section entries', (tester) async {

@@ -119,10 +119,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               errorBuilder: (_, _, _) => Container(
                                 height: 72,
                                 width: 72,
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   gradient: AppColors.brandGradient,
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.restaurant_menu_rounded,
                                   size: 36,
                                   color: AppColors.onPrimary,

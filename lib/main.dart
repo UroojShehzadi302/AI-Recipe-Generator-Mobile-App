@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'app/app.dart';
 import 'core/config/ai_config.dart';
 import 'firebase_options.dart';
+import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
 import 'services/notification_store.dart';
 
@@ -87,7 +88,17 @@ Future<void> main() async {
       // --dart-define. Requires Firebase to be initialized first (above).
       final AiConfig aiConfig = await AiConfig.load();
 
-      runApp(RecipeGeneratorApp(aiConfig: aiConfig));
+      // Resolve the saved light/dark preference before the first frame. Doing
+      // this after runApp would paint one light frame and then correct itself,
+      // which reads as a flash on every launch for a dark-mode user.
+      final ThemeProvider themeProvider = await ThemeProvider.load(
+        platformBrightness:
+            WidgetsBinding.instance.platformDispatcher.platformBrightness,
+      );
+
+      runApp(
+        RecipeGeneratorApp(aiConfig: aiConfig, themeProvider: themeProvider),
+      );
     },
     _reportError,
   );

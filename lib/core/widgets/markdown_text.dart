@@ -147,7 +147,7 @@ class MarkdownText extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppDimensions.spaceXs),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
             left: BorderSide(color: AppColors.secondary, width: 3),
           ),
@@ -191,11 +191,11 @@ class MarkdownText extends StatelessWidget {
     }
 
     final TextStyle headerStyle = base.copyWith(fontWeight: FontWeight.w600);
-    const BorderSide side = BorderSide(color: AppColors.border, width: 1);
+    final BorderSide side = BorderSide(color: AppColors.border, width: 1);
 
     final List<TableRow> tableRows = <TableRow>[
       TableRow(
-        decoration: const BoxDecoration(color: AppColors.primarySoft),
+        decoration: BoxDecoration(color: AppColors.primarySoft),
         children: <Widget>[
           for (int c = 0; c < columns; c++)
             _tableCell(c < header.length ? header[c] : '', headerStyle),
@@ -214,7 +214,7 @@ class MarkdownText extends StatelessWidget {
     blocks.add(Padding(
       padding: const EdgeInsets.only(bottom: AppDimensions.spaceS),
       child: Table(
-        border: const TableBorder(
+        border: TableBorder(
           top: side,
           bottom: side,
           left: side,

@@ -89,7 +89,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        title: const Text('Delete Account', style: AppTextStyles.title),
+        title: Text('Delete Account', style: AppTextStyles.title),
       ),
       body: SafeArea(
         top: false,
@@ -190,7 +190,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const Icon(Icons.error_outline, color: AppColors.error),
+              Icon(Icons.error_outline, color: AppColors.error),
               const SizedBox(width: AppDimensions.spaceM),
               Expanded(
                 child: Text(
@@ -232,8 +232,8 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.only(top: 6, right: AppDimensions.spaceS),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, right: AppDimensions.spaceS),
             child: Icon(Icons.circle, size: 5, color: AppColors.textSecondary),
           ),
           Expanded(child: Text(text, style: AppTextStyles.subtitle)),

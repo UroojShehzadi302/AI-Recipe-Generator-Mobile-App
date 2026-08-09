@@ -209,7 +209,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         return Container(
           color: AppColors.primarySoft,
           alignment: Alignment.center,
-          child: const SizedBox(
+          child: SizedBox(
             width: 28,
             height: 28,
             child: CircularProgressIndicator(
@@ -226,7 +226,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   /// Gradient fallback shown when the image is missing or fails to load.
   Widget _buildImagePlaceholder() {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -250,9 +250,9 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     return Container(
       // Overlap the hero slightly with rounded top corners.
       transform: Matrix4.translationValues(0, -AppDimensions.spaceXl, 0),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.background,
-        borderRadius: BorderRadius.vertical(
+        borderRadius: const BorderRadius.vertical(
           top: Radius.circular(AppDimensions.radiusXl),
         ),
       ),
@@ -354,7 +354,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
             margin: const EdgeInsets.only(top: 6),
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.primary,
               shape: BoxShape.circle,
             ),
@@ -395,7 +395,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
             width: 28,
             height: 28,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.primarySoft,
               shape: BoxShape.circle,
             ),
@@ -466,8 +466,8 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
             child: Icon(
               Icons.lightbulb_outline,
               size: 18,
@@ -487,7 +487,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
   Widget _buildBottomBar() {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         boxShadow: AppShadows.card,
       ),
@@ -707,7 +707,7 @@ class _ShareButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
-          child: const Icon(Icons.share, color: AppColors.primary),
+          child: Icon(Icons.share, color: AppColors.primary),
         ),
       ),
     );

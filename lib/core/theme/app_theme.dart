@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 import 'app_dimensions.dart';
+import 'app_palette.dart';
 import 'app_durations.dart';
 import 'app_text_styles.dart';
 
@@ -15,16 +16,46 @@ import 'app_text_styles.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get lightTheme {
+  /// The light theme — the palette the app has always shipped.
+  static ThemeData get lightTheme => _themeFor(AppPalette.light);
+
+  /// The dark theme.
+  ///
+  /// Built by the *same* builder as [lightTheme]. Every component default here
+  /// is already expressed in `AppColors` tokens, and those resolve through
+  /// [AppPalette.current], so pointing the palette at dark and re-running this
+  /// produces a correctly themed dark `ThemeData` with no duplicated spec. Two
+  /// hand-maintained copies would drift the moment anyone edited one.
+  static ThemeData get darkTheme => _themeFor(AppPalette.dark);
+
+  /// Builds a [ThemeData] with [palette] temporarily active.
+  ///
+  /// `MaterialApp` asks for `theme` and `darkTheme` in the same breath, so this
+  /// cannot rely on whichever palette happens to be current — it swaps to the
+  /// requested one, builds, and restores. The restore is in a `finally` so a
+  /// throw mid-build cannot strand the app on the wrong palette.
+  static ThemeData _themeFor(AppPalette palette) {
+    final AppPalette previous = AppPalette.current;
+    AppPalette.apply(palette);
+    try {
+      return _build(palette.brightness);
+    } finally {
+      AppPalette.apply(previous);
+    }
+  }
+
+  static ThemeData _build(Brightness brightness) {
     final ColorScheme scheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
-      brightness: Brightness.light,
+      brightness: brightness,
       primary: AppColors.primary,
+      onPrimary: AppColors.onPrimary,
       surface: AppColors.surface,
       error: AppColors.error,
     );
 
     return ThemeData(
+      brightness: brightness,
       useMaterial3: true,
       fontFamily: AppTextStyles.fontFamily,
       scaffoldBackgroundColor: AppColors.background,
@@ -44,7 +75,7 @@ class AppTheme {
       ),
 
       // Transparent, flat app bar (premium minimal look).
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -81,7 +112,7 @@ class AppTheme {
           foregroundColor: AppColors.primary,
           minimumSize: const Size(double.infinity, AppDimensions.buttonHeight),
           textStyle: AppTextStyles.button.copyWith(color: AppColors.primary),
-          side: const BorderSide(color: AppColors.border, width: 1.2),
+          side: BorderSide(color: AppColors.border, width: 1.2),
           shape: RoundedRectangleBorder(borderRadius: AppDimensions.brMd),
         ),
       ),
@@ -103,19 +134,19 @@ class AppTheme {
         errorStyle: AppTextStyles.caption.copyWith(color: AppColors.error),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brMd,
-          borderSide: const BorderSide(color: AppColors.border, width: 1.2),
+          borderSide: BorderSide(color: AppColors.border, width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brMd,
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.6),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.6),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brMd,
-          borderSide: const BorderSide(color: AppColors.error, width: 1.2),
+          borderSide: BorderSide(color: AppColors.error, width: 1.2),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brMd,
-          borderSide: const BorderSide(color: AppColors.error, width: 1.6),
+          borderSide: BorderSide(color: AppColors.error, width: 1.6),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: AppDimensions.brMd,
@@ -140,13 +171,13 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: AppDimensions.brXl),
       ),
 
-      bottomSheetTheme: const BottomSheetThemeData(
+      bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         showDragHandle: true,
         dragHandleColor: AppColors.border,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(AppDimensions.radiusXl),
           ),
@@ -172,7 +203,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surface,
         selectedColor: AppColors.primary,
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
         labelStyle: AppTextStyles.caption,
         secondaryLabelStyle: AppTextStyles.caption,
         padding: const EdgeInsets.symmetric(
@@ -182,13 +213,13 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: AppDimensions.brPill),
       ),
 
-      listTileTheme: const ListTileThemeData(
+      listTileTheme: ListTileThemeData(
         titleTextStyle: AppTextStyles.cardTitle,
         subtitleTextStyle: AppTextStyles.caption,
         iconColor: AppColors.primary,
       ),
 
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: AppColors.primary,
         linearTrackColor: AppColors.primarySoft,
         circularTrackColor: Colors.transparent,
@@ -200,12 +231,12 @@ class AppTheme {
         selectionHandleColor: AppColors.primary,
       ),
 
-      iconTheme: const IconThemeData(
+      iconTheme: IconThemeData(
         color: AppColors.textPrimary,
         size: AppDimensions.iconLg,
       ),
 
-      textTheme: const TextTheme(
+      textTheme: TextTheme(
         displaySmall: AppTextStyles.display,
         headlineMedium: AppTextStyles.screenTitle,
         titleLarge: AppTextStyles.sectionTitle,
