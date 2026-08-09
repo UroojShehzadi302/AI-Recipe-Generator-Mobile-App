@@ -76,6 +76,46 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:845885648760:android:b9b3a973a5488775ff228d",
+        "android_client_info": {
+          "package_name": "com.urooj.cookmate"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "845885648760-pioaf2q0ejhiudu3mhou4fpg6hdv650v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.urooj.cookmate",
+            "certificate_hash": "c10e2cbed8f44d4d713e93e0edd968c058f33a53"
+          }
+        },
+        {
+          "client_id": "845885648760-hl2qrl11b3i1hclclrk7kdcitha1a93u.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSxFwgjwBooVBvD_2CIeGIeFmx1rrSCoo"
+        },
+        {
+          "current_key": "AIzaSyDlrFImk7qmNMfiDAO4jqDZeZ5CiwYY3-o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "845885648760-hl2qrl11b3i1hclclrk7kdcitha1a93u.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
