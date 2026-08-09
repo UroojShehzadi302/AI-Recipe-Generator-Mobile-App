@@ -1,9 +1,3 @@
-// ⚠️ TEMPORARY — the debug-only crash-test row is the ONLY reason a screen
-// imports Crashlytics directly. Everywhere else goes through the CrashReporter
-// seam, and `crashlytics_crash_reporter.dart` is normally the sole file allowed
-// to touch this package. Remove this import with the debug rows.
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -21,8 +15,6 @@ import '../providers/notification_provider.dart';
 import '../providers/text_scale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../routes/app_routes.dart';
-// ⚠️ TEMPORARY — only the debug-only crash-test rows use this. Remove with them.
-import '../services/crash_reporter.dart';
 
 /// Settings (M11) — preferences, legal links, and account actions.
 ///
@@ -60,47 +52,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _setNotifications(bool enabled) async {
     await context.read<NotificationProvider>().setNotificationsEnabled(enabled);
   }
-
-  // ⚠️ TEMPORARY — the two handlers below back the debug-only group at the
-  // bottom of this screen. Delete both, their rows, and their AppStrings once
-  // Crashlytics is confirmed working. They are only reachable from a `if
-  // (kDebugMode)` subtree, so a release build cannot call them.
-
-  /// Reports a caught, NON-fatal error — the app keeps running.
-  ///
-  /// Try this one first: it exercises the whole path (seam → Crashlytics →
-  /// console) without killing the process, so if it lands you know the wiring
-  /// is right and any later silence is a console/config problem, not code.
-  void _sendTestCrashReport() {
-    CrashReporter.recordErrorSafely(
-      Exception('CookMate AI test report — triggered from Settings'),
-      StackTrace.current,
-    );
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text(AppStrings.debugReportSent)),
-      );
-  }
-
-  /// Triggers a real, FATAL native crash — the app terminates.
-  ///
-  /// ⚠️ A plain Dart `throw` does NOT do this, which is worth understanding
-  /// before "fixing" this back. `main.dart` installs `FlutterError.onError` and
-  /// `PlatformDispatcher.onError` precisely so an isolated failure is contained
-  /// instead of taking the app down, so a thrown error is caught by that net
-  /// and filed as **non-fatal** — the app stays open, which is the hardening
-  /// working as designed.
-  ///
-  /// `FirebaseCrashlytics.crash()` crashes the native layer, below Dart, so no
-  /// Flutter handler can intercept it. That distinction matters here: the
-  /// console's "waiting for a crash" banner is generally satisfied by a FATAL
-  /// report, and non-fatals may not clear it.
-  ///
-  /// The report is written to disk as the process dies and uploaded on the
-  /// NEXT launch. The app closing is the feature working — reopen it, wait a
-  /// moment, then check the console.
-  void _forceCrash() => FirebaseCrashlytics.instance.crash();
 
   static IconData _themeIcon(ThemeMode mode) {
     switch (mode) {
@@ -399,35 +350,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
-
-                // ⚠️ TEMPORARY — DEBUG BUILDS ONLY. Exists to prove reports
-                // actually reach the Crashlytics console, which no test can
-                // show. `kDebugMode` is a compile-time constant, so this whole
-                // subtree is tree-shaken out of a release build and cannot
-                // reach a user. DELETE once the console shows a report.
-                if (kDebugMode) ...[
-                  const SizedBox(height: AppDimensions.spaceL),
-                  FadeSlideIn(
-                    delay: AppAnimations.staggerFor(3),
-                    child: _SettingsGroup(
-                      title: AppStrings.debugGroup,
-                      children: [
-                        _SettingsRow(
-                          icon: Icons.bug_report_outlined,
-                          label: AppStrings.debugSendTestReport,
-                          onTap: _sendTestCrashReport,
-                        ),
-                        _SettingsRow(
-                          icon: Icons.dangerous_outlined,
-                          label: AppStrings.debugForceCrash,
-                          onTap: _forceCrash,
-                          destructive: true,
-                          isLast: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
 
                 const SizedBox(height: AppDimensions.spaceXl),
                 Center(
