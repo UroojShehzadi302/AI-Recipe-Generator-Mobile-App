@@ -12,6 +12,7 @@ import '../core/utils/responsive.dart';
 import '../core/widgets/about_dialog.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/text_scale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../routes/app_routes.dart';
 
@@ -99,6 +100,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (picked != null) await provider.setMode(picked);
+  }
+
+  static String _textScaleLabel(AppTextScale scale) {
+    switch (scale) {
+      case AppTextScale.small:
+        return AppStrings.textSizeSmall;
+      case AppTextScale.medium:
+        return AppStrings.textSizeMedium;
+      case AppTextScale.large:
+        return AppStrings.textSizeLarge;
+    }
+  }
+
+  /// Opens the text size picker.
+  ///
+  /// A dialog for the same reason the theme picker is one: three named steps
+  /// are a choice a person can make, where a slider would imply a precision
+  /// nobody can judge by eye.
+  ///
+  /// The options render at their own scale (see [_TextScaleOption]) so the user
+  /// can see the result before committing — picking a text size from a list
+  /// that is all one size makes you guess.
+  Future<void> _pickTextScale() async {
+    final TextScaleProvider provider = context.read<TextScaleProvider>();
+    final AppTextScale? picked = await showDialog<AppTextScale>(
+      context: context,
+      builder: (BuildContext dialogContext) => SimpleDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppDimensions.brXl),
+        title: Text(AppStrings.textSize, style: AppTextStyles.sectionTitle),
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.spaceXl,
+              0,
+              AppDimensions.spaceXl,
+              AppDimensions.spaceS,
+            ),
+            child: Text(
+              AppStrings.textSizeDialogNote,
+              style: AppTextStyles.caption,
+            ),
+          ),
+          for (final AppTextScale scale in AppTextScale.values)
+            _TextScaleOption(
+              scale: scale,
+              selected: scale == provider.scale,
+              onTap: () => Navigator.pop(dialogContext, scale),
+            ),
+        ],
+      ),
+    );
+
+    if (picked != null) await provider.setScale(picked);
   }
 
   /// Presents [url] in a copyable dialog.
@@ -216,6 +271,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           context.watch<ThemeProvider>().mode,
                         ),
                         onTap: _pickTheme,
+                      ),
+                      _SettingsRow(
+                        icon: Icons.format_size_rounded,
+                        label: AppStrings.textSize,
+                        trailingText: _textScaleLabel(
+                          context.watch<TextScaleProvider>().scale,
+                        ),
+                        onTap: _pickTextScale,
                         isLast: true,
                       ),
                     ],
@@ -586,6 +649,99 @@ class _ThemeOption extends StatelessWidget {
                         ? AppTextStyles.bodyMedium
                             .copyWith(color: AppColors.primary)
                         : AppTextStyles.body,
+                  ),
+                  Text(subtitle, style: AppTextStyles.caption),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(
+                Icons.check_rounded,
+                size: AppDimensions.iconMd,
+                color: AppColors.primary,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One row of the text size picker.
+///
+/// Mirrors [_ThemeOption], with one deliberate difference: **each row previews
+/// its own size.** The label is rendered with a [TextScaler] set to that
+/// option's factor, so "Large" actually looks large in the list. Picking a text
+/// size from three identically-sized rows would mean choosing blind and then
+/// reopening Settings to check.
+///
+/// The preview is intentionally the option's *own* factor rather than its
+/// clamped effective size — this is a relative comparison between the three
+/// choices, and the clamp only bites when the OS is already near its maximum.
+class _TextScaleOption extends StatelessWidget {
+  const _TextScaleOption({
+    required this.scale,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppTextScale scale;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (String label, String subtitle) = switch (scale) {
+      AppTextScale.small => (
+          AppStrings.textSizeSmall,
+          AppStrings.textSizeSmallSubtitle,
+        ),
+      AppTextScale.medium => (
+          AppStrings.textSizeMedium,
+          AppStrings.textSizeMediumSubtitle,
+        ),
+      AppTextScale.large => (
+          AppStrings.textSizeLarge,
+          AppStrings.textSizeLargeSubtitle,
+        ),
+    };
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceXl,
+          vertical: AppDimensions.spaceM,
+        ),
+        child: Row(
+          children: [
+            // A glyph whose size tracks the option, so the row reads as a size
+            // choice even before the label is parsed.
+            Icon(
+              Icons.text_fields_rounded,
+              size: AppDimensions.iconMd * scale.factor,
+              color: selected ? AppColors.primary : AppColors.textSecondary,
+            ),
+            const SizedBox(width: AppDimensions.spaceM),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  MediaQuery(
+                    // Preview only. Scoped to this label so the subtitle below
+                    // stays at the app's own size and the rows keep a common
+                    // baseline to compare against.
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(scale.factor),
+                    ),
+                    child: Text(
+                      label,
+                      style: selected
+                          ? AppTextStyles.bodyMedium
+                              .copyWith(color: AppColors.primary)
+                          : AppTextStyles.body,
+                    ),
                   ),
                   Text(subtitle, style: AppTextStyles.caption),
                 ],

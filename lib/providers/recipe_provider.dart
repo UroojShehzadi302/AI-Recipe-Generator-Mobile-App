@@ -16,11 +16,13 @@
 
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_strings.dart';
 import '../core/constants/sample_recipes.dart';
 import '../core/error/failure.dart';
 import '../models/generation_entry.dart';
 import '../models/recipe_model.dart';
 import '../repositories/recipe_repository.dart';
+import 'connectivity_provider.dart';
 
 /// Coarse lifecycle status for an async section of the screen.
 enum LoadStatus {
@@ -43,9 +45,48 @@ const String _genericError = 'Something went wrong. Please try again.';
 /// Holds and coordinates all recipe-related UI state.
 class RecipeProvider extends ChangeNotifier {
   /// Creates a provider backed by [_repository].
-  RecipeProvider(this._repository);
+  ///
+  /// [connectivity] is optional and injected rather than looked up, so this
+  /// provider stays constructible in a plain unit test with nothing wired.
+  /// When present it is told about transport-level outcomes so the app can
+  /// word its errors honestly — see [_noteNetworkOutcome].
+  RecipeProvider(this._repository, {ConnectivityProvider? connectivity})
+      // `this._connectivity` is not usable here: a named parameter derived
+      // from a private field is un-passable from another library, and app.dart
+      // constructs this provider.
+      // ignore: prefer_initializing_formals
+      : _connectivity = connectivity;
 
   final RecipeRepository _repository;
+  final ConnectivityProvider? _connectivity;
+
+  /// Feeds a repository result back into connectivity tracking.
+  ///
+  /// The app makes real network calls constantly (TheMealDB, Gemini), so their
+  /// outcomes are the cheapest and most truthful connectivity signal available
+  /// — far better than polling. A [NetworkFailure] is the ONLY failure treated
+  /// as evidence: an [AiFailure] means the request reached Gemini and came back
+  /// wrong, which says the connection works.
+  void _noteNetworkOutcome({required bool succeeded}) {
+    final ConnectivityProvider? c = _connectivity;
+    if (c == null) return;
+    if (succeeded) {
+      c.reportSuccess();
+    } else {
+      c.reportFailure();
+    }
+  }
+
+  /// Rewords an AI failure when the device is CONFIRMED offline.
+  ///
+  /// Only substitutes when [ConnectivityProvider.isOffline] is true — i.e. a
+  /// failed request that a probe agreed with. Anything less certain keeps the
+  /// original message: claiming "no internet" to a user whose connection is
+  /// fine sends them to fix the wrong thing.
+  String _offlineAwareMessage(String fallback) {
+    if (_connectivity?.isOffline ?? false) return AppStrings.offlineAiError;
+    return fallback;
+  }
 
   // ---------------------------------------------------------------------------
   // Home feed state.
@@ -161,9 +202,17 @@ class RecipeProvider extends ChangeNotifier {
         _repository.getRecipesByCategory(_popularCategory),
         _repository.getRecipesByCategory(_quickCategory),
       ]);
+      // TheMealDB answered: the cheapest possible proof the network works, and
+      // it runs on every Home load, so in practice this is what keeps the
+      // offline banner honest without any polling.
+      _noteNetworkOutcome(succeeded: true);
       if (live[0].isNotEmpty) _popularRail = live[0];
       if (live[1].isNotEmpty) _quickRail = live[1];
       notifyListeners();
+    } on NetworkFailure {
+      // Keep the curated seed — the rails still show content, so there is
+      // nothing to surface here beyond noting the transport failure.
+      _noteNetworkOutcome(succeeded: false);
     } catch (_) {
       // Keep the curated seed — nothing to surface to the user.
     }
@@ -207,17 +256,30 @@ class RecipeProvider extends ChangeNotifier {
 
     try {
       final Recipe recipe = await _repository.generateRecipe(prompt);
+      // A reply came back, so the connection demonstrably works.
+      _noteNetworkOutcome(succeeded: true);
       _generated = recipe;
       _lastPrompt = prompt.trim();
       _genStatus = LoadStatus.loaded;
       notifyListeners();
       return recipe;
     } on UnimplementedError {
+      // "Not wired yet" — a code state, not a network one. Report nothing.
       _genError = 'AI generation coming soon';
       _genStatus = LoadStatus.error;
       notifyListeners();
       return null;
+    } on NetworkFailure catch (failure) {
+      // The only branch that is real evidence of a transport problem. Report
+      // it, then let the probe's verdict decide the wording.
+      _noteNetworkOutcome(succeeded: false);
+      _genError = _offlineAwareMessage(failure.message);
+      _genStatus = LoadStatus.error;
+      notifyListeners();
+      return null;
     } on Failure catch (failure) {
+      // Reached the service and came back wrong (quota, blocked, bad response).
+      // Not a connectivity signal — the request clearly got through.
       _genError = failure.message;
       _genStatus = LoadStatus.error;
       notifyListeners();

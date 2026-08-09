@@ -124,6 +124,28 @@ class AppStrings {
   static const String themeLightSubtitle = 'Always light';
   static const String themeDarkSubtitle = 'Always dark';
 
+  // Text size / accessibility.
+  static const String textSize = 'Text Size';
+  static const String textSizeSmall = 'Small';
+  static const String textSizeMedium = 'Medium';
+  static const String textSizeLarge = 'Large';
+
+  /// The subtitles say what each step does *relative to the phone's own font
+  /// setting*, because that is exactly what they do — this preference is
+  /// applied on top of the system size, not instead of it. A user who has
+  /// already enlarged text device-wide would otherwise reasonably read
+  /// "Medium" as "shrink me back to normal".
+  static const String textSizeSmallSubtitle = 'Slightly smaller than your '
+      'device setting';
+  static const String textSizeMediumSubtitle = 'Match your device setting';
+  static const String textSizeLargeSubtitle = 'Easier to read';
+
+  /// Shown under the picker title. Sets the expectation that a user already at
+  /// their phone's maximum font size may see little change — the combined size
+  /// is capped so the layout stays usable.
+  static const String textSizeDialogNote =
+      'Applied on top of your device font size.';
+
   static const String privacyPolicy = 'Privacy Policy';
   static const String termsOfService = 'Terms of Service';
   static const String aboutApp = 'About $appName';
@@ -169,6 +191,20 @@ class AppStrings {
   /// where the text went rather than assuming the share failed outright.
   static const String shareCopiedToClipboard = 'Recipe copied to clipboard';
   static const String shareFailed = 'Could not share this recipe';
+
+  // ---- Offline / connectivity ----
+  // Worded as an observation, not an accusation or an instruction. The app
+  // cannot tell WHY the connection is gone (Wi-Fi off, no signal, DNS blocked),
+  // so telling the user to "check your Wi-Fi" would be a guess.
+
+  /// The persistent strip shown while the app has confirmed it is offline.
+  static const String offlineBanner = "You're offline — some features are limited";
+
+  /// Replaces a generic AI error when the failure happened while offline.
+  /// Says only what is actually known: the request needed a connection and
+  /// there wasn't one.
+  static const String offlineAiError =
+      'No internet connection. Reconnect to use AI features.';
 
   // ---- Generic actions ----
   static const String cancel = 'Cancel';

@@ -9,6 +9,7 @@ import '../theme/app_dimensions.dart';
 import '../theme/app_durations.dart';
 import '../theme/app_shadows.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_image_cache.dart';
 
 /// A branded "opening this recipe" overlay.
 ///
@@ -147,10 +148,17 @@ class _PulsingThumbnailState extends State<_PulsingThumbnail>
                 height: _size,
                 child: widget.imageUrl.isEmpty
                     ? _placeholder()
-                    : Image.network(
-                        widget.imageUrl,
+                    : Image(
+                        // Disk-backed: this overlay shows the photo of a card
+                        // the user just tapped, so the bytes are almost always
+                        // already cached — it paints instantly instead of
+                        // re-downloading. _size is a fixed constant, so the
+                        // decode width is always finite here.
+                        image: cachedNetworkImage(
+                          widget.imageUrl,
+                          cacheWidth: (_size * 3).round(),
+                        ),
                         fit: BoxFit.cover,
-                        cacheWidth: (_size * 3).round(),
                         errorBuilder: (_, _, _) => _placeholder(),
                       ),
               ),

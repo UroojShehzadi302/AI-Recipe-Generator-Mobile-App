@@ -6,6 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
+import '../core/utils/app_image_cache.dart';
 import '../core/utils/recipe_share_text.dart';
 import '../core/widgets/favorite_button.dart';
 import '../core/widgets/primary_button.dart';
@@ -201,8 +202,18 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     if (_recipe.imageUrl.isEmpty) {
       return _buildImagePlaceholder();
     }
-    return Image.network(
-      _recipe.imageUrl,
+    // The hero spans the full screen width, so decode to that rather than the
+    // source's native resolution: TheMealDB JPEGs are up to ~1000px square,
+    // which decodes to ~4 MB of bitmap for an image displayed much smaller.
+    // MediaQuery width is always finite, so this cannot hit the infinity crash
+    // documented in recipe_card.dart.
+    final double dpr = MediaQuery.devicePixelRatioOf(context);
+    final double logicalWidth = MediaQuery.sizeOf(context).width;
+    final int? cacheWidth =
+        logicalWidth > 0 ? (logicalWidth * dpr).round() : null;
+
+    return Image(
+      image: cachedNetworkImage(_recipe.imageUrl, cacheWidth: cacheWidth),
       fit: BoxFit.cover,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;

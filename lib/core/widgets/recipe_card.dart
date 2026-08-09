@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_dimensions.dart';
 import '../theme/app_shadows.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_image_cache.dart';
 import 'favorite_button.dart';
 
 /// A premium recipe card for horizontal rails and grids.
@@ -270,11 +271,16 @@ class RecipeCard extends StatelessWidget {
 
         return AspectRatio(
           aspectRatio: _imageAspect,
-          child: Image.network(
-            recipe.imageUrl,
+          // Image (not Image.network) so the bytes come from the disk-backed
+          // provider: Flutter's NetworkImage keeps nothing on disk, so every
+          // photo re-downloaded on each cold launch. ResizeImage reproduces
+          // exactly what `Image.network(cacheWidth:)` does internally — see the
+          // infinity warning above; `cacheWidth` is still the LayoutBuilder
+          // value and is still null when the width is unconstrained.
+          child: Image(
+            image: cachedNetworkImage(recipe.imageUrl, cacheWidth: cacheWidth),
             width: double.infinity,
             fit: BoxFit.cover,
-            cacheWidth: cacheWidth,
             loadingBuilder: (context, child, progress) {
               if (progress == null) return child;
               return _loading();
