@@ -158,16 +158,21 @@ class AppStrings {
   static const String linkCopied = 'Link copied';
 
   // ---- External URLs ----
-  // TODO(owner): replace both with the real hosted URLs. The Privacy Policy and
-  // Terms were hosted on 2026-08-04 as store-listing fields; paste the same two
-  // addresses here so the in-app links point at them. Until then these
-  // placeholders are shown verbatim in the link dialog.
-  /// TODO(owner): PLACEHOLDER — replace with the hosted Privacy Policy URL.
+  // Served by GitHub Pages from `docs/` on the default branch. The pages live
+  // in this repo (docs/privacy-policy.html, docs/terms.html) so the text and
+  // the app ship together and cannot drift apart.
+  //
+  // ⚠️ OWNER: these resolve only once GitHub Pages is switched on —
+  // repo → Settings → Pages → Source: "Deploy from a branch", branch `main`,
+  // folder `/docs`. Play requires a REACHABLE Privacy Policy URL for any app
+  // that collects an email address, so verify both open in a browser before
+  // submitting the listing. If the repo is ever renamed or moved, these two
+  // strings must move with it.
   static const String privacyPolicyUrl =
-      'https://example.com/cookmate-ai/privacy';
+      'https://uroojshehzadi302.github.io/AI-Recipe-Generator-Mobile-App/privacy-policy.html';
 
-  /// TODO(owner): PLACEHOLDER — replace with the hosted Terms of Service URL.
-  static const String termsUrl = 'https://example.com/cookmate-ai/terms';
+  static const String termsUrl =
+      'https://uroojshehzadi302.github.io/AI-Recipe-Generator-Mobile-App/terms.html';
 
   // ---- Share ----
   // Section labels for the plain-text recipe built by `RecipeShareText`.
