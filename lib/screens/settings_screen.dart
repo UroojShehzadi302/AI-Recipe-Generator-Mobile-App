@@ -1,3 +1,8 @@
+// ⚠️ TEMPORARY — the debug-only crash-test row is the ONLY reason a screen
+// imports Crashlytics directly. Everywhere else goes through the CrashReporter
+// seam, and `crashlytics_crash_reporter.dart` is normally the sole file allowed
+// to touch this package. Remove this import with the debug rows.
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -78,16 +83,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
   }
 
-  /// Throws for real, terminating the app.
+  /// Triggers a real, FATAL native crash — the app terminates.
   ///
-  /// This is the case Crashlytics is actually built for, and it behaves
-  /// differently from the non-fatal above: the report is written to disk as the
-  /// process dies and uploaded on the NEXT launch. The app closing is the
-  /// feature working, not a bug — reopen it, wait a moment, then look at the
-  /// console.
-  void _forceCrash() {
-    throw StateError('CookMate AI forced crash — triggered from Settings');
-  }
+  /// ⚠️ A plain Dart `throw` does NOT do this, which is worth understanding
+  /// before "fixing" this back. `main.dart` installs `FlutterError.onError` and
+  /// `PlatformDispatcher.onError` precisely so an isolated failure is contained
+  /// instead of taking the app down, so a thrown error is caught by that net
+  /// and filed as **non-fatal** — the app stays open, which is the hardening
+  /// working as designed.
+  ///
+  /// `FirebaseCrashlytics.crash()` crashes the native layer, below Dart, so no
+  /// Flutter handler can intercept it. That distinction matters here: the
+  /// console's "waiting for a crash" banner is generally satisfied by a FATAL
+  /// report, and non-fatals may not clear it.
+  ///
+  /// The report is written to disk as the process dies and uploaded on the
+  /// NEXT launch. The app closing is the feature working — reopen it, wait a
+  /// moment, then check the console.
+  void _forceCrash() => FirebaseCrashlytics.instance.crash();
 
   static IconData _themeIcon(ThemeMode mode) {
     switch (mode) {
