@@ -94,6 +94,14 @@
           }
         },
         {
+          "client_id": "845885648760-v7smkmupkg54pd62anu10la6nuc6e44t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.urooj.cookmate",
+            "certificate_hash": "f0b834eb68a2e40ed3f7b76f4b9f743a99acea20"
+          }
+        },
+        {
           "client_id": "845885648760-hl2qrl11b3i1hclclrk7kdcitha1a93u.apps.googleusercontent.com",
           "client_type": 3
         }
