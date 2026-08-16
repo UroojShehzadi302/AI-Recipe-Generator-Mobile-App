@@ -72,36 +72,61 @@ in `android/app/`). Just verify on-device:
 
 ---
 
-## 5. Release signing key (required before ANY Play Store upload)
+## 5. ✅ DONE — Release signing key generated (2026-08-16)
 
-The release build currently falls back to the **debug** keystore, which is shared
-by every Flutter install on the machine — anyone can sign an app with it, so Play
-rejects it. Generate a real key once and keep it forever: **lose it and you can
-never update the app on Play again.**
+> ⚠️ An earlier version of this file recorded this step as done on 2026-08-04.
+> That was **false** — no keystore had ever been generated, and every "release"
+> build until 2026-08-16 was silently signed `CN=Android Debug`, which Play
+> rejects outright. Verify with the `keytool -printcert` command below rather
+> than trusting a checkbox.
 
-```bash
-keytool -genkey -v -keystore %USERPROFILE%\upload-keystore.jks ^
-  -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
-```
+The key now exists and is in use:
 
-Then create `android/key.properties` (already git-ignored — **never commit it**):
+- Keystore: `C:\Users\Urooj Shehzadi\cookmate-upload.jks` (JKS, alias `upload`,
+  valid to 2054). **Not in the repo and never committed** — `android/.gitignore`
+  covers `key.properties`, `*.jks`, `*.keystore`.
+- Certificate: `CN=Urooj Shehzadi, OU=CookMate AI, O=CookMate AI, L=Rawalpindi`
+- **SHA-1: `F0:B8:34:EB:68:A2:E4:0E:D3:F7:B7:6F:4B:9F:74:3A:99:AC:EA:20`**
+- ⚠️ The store password and key password are **different**. Both live in the
+  owner's password manager and in `android/key.properties` only.
+
+`android/key.properties` (git-ignored — **never commit it**) points at it:
 
 ```properties
-storePassword=<the store password you just typed>
-keyPassword=<the key password you just typed>
+storePassword=<keystore password>
+keyPassword=<key password — NOT the same one>
 keyAlias=upload
-storeFile=C:/Users/<you>/upload-keystore.jks
+storeFile=C:/Users/Urooj Shehzadi/cookmate-upload.jks
 ```
 
+⚠️ `storeFile` needs **forward slashes** on Windows; backslashes fail in Gradle.
+
 `android/app/build.gradle.kts` picks it up automatically; with the file absent it
-silently uses debug signing so local `flutter run --release` still works.
+silently falls back to debug signing so local `flutter run --release` keeps
+working — which is exactly how the 2026-08-04 gap went unnoticed for months.
 
-Back the `.jks` file up somewhere safe and offline.
+**Verify any bundle before uploading** — this is the only reliable check:
 
-> After creating the key, add its SHA-1 to Firebase (Project settings → your
-> Android app → Add fingerprint) and re-download `google-services.json`, or
-> **Google Sign-In will fail in release builds** — it is bound to the signing
-> certificate.
+```bash
+flutter build appbundle --release
+keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab
+```
+
+It must print `Owner: CN=Urooj Shehzadi …`. If it says `CN=Android Debug`,
+`key.properties` is missing or unreadable and Play will reject the upload.
+(`keytool` exits 255 while printing a JKS warning — harmless, read the output.)
+
+### If this clone is replaced
+
+`key.properties` and the `.jks` live only on the owner's machine. A fresh clone
+builds fine but reverts to debug signing until both are restored.
+
+> ⚠️ Remaining: the SHA-1 above must be added in **two** places — Firebase
+> (Project settings → Android app → Add fingerprint, then re-download
+> `google-services.json`) **and** the Google Cloud Console API-key restriction
+> (see "Renaming the Android package" below). Google Sign-In is bound to the
+> signing certificate, so a release build without both is dead on sign-in *and*
+> FCM, with error messages that never mention the key.
 
 ---
 
