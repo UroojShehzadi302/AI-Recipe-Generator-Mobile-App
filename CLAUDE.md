@@ -308,6 +308,26 @@ Remaining:
 ✅ **Cloud Console side cleared 2026-08-16 too — and DEVICE-VERIFIED on a release build.** `com.urooj.cookmate` + the release SHA-1 was added to the API key whose *Restrictions* column reads "Android apps" (the **Jul 9 2026** `Android key (auto created by Firebase)`; the Jul 11 one shows only "25 APIs" and is NOT it). That key now carries three entries — the old `com.example.…`+debug pair, `com.urooj.cookmate`+debug (keeps `flutter run` working), and `com.urooj.cookmate`+release.
 - ⚠️ `firebase-tools` **cannot** read or edit this restriction (`apps:android:sha:*` registers against the *app*, a different thing). There is no CLI verification — the only proof is a release-signed build signing in on a device, which is exactly how it was verified here.
 - **Verified 2026-08-16 by the owner** on the release APK (`CN=Urooj Shehzadi`, uninstall-then-install so it was genuinely the release signature): **Google Sign-In works and AI chat works.**
-- **FCM was deliberately not re-tested** and is considered covered by inference, not by observation: it authenticates with the same `apiKey`, and in the 2026-08-09 incident sign-in and FCM died together and recovered together. ⚠️ Testing it on a release build is awkward by design — `notification_provider.dart:138` prints the token behind `kDebugMode`, so a release APK logs nothing and there is no topic subscription to target instead. Getting a token from a release build would need temporary in-app scaffolding (the crash-test-row pattern). If push ever looks broken on a store build, this is the untested gap.
+- **FCM was deliberately not re-tested on a release build** — it authenticates with the same `apiKey`, and in the 2026-08-09 incident sign-in and FCM died together and recovered together. A debug run on 2026-08-17 logged `FCM permission: AuthorizationStatus.authorized` and a live token, confirming the API-key side. ⚠️ Testing it on a *release* build is awkward by design: `notification_provider.dart:138` prints the token behind `kDebugMode`, so a release APK logs nothing and there is no topic subscription to target instead. Getting a token from a release build would need temporary in-app scaffolding (the crash-test-row pattern).
+
+## ⚠️ Play App Signing adds a THIRD certificate — 2026-08-17
+
+Uploading to Play introduces a signing key nobody generated: **Play re-signs the bundle with Google's own key** before delivering it. A build installed from Play therefore presents a certificate that is neither the debug key nor the upload key, and Google Sign-In dies on it — **silently**, because `auth_repository.dart:388` maps `GoogleSignInExceptionCode.canceled` to `return null` (a user dismissal), and every `debugPrint` on that path sits behind `kDebugMode`. A release build shows no dialog, no snackbar, nothing.
+
+**There are now three fingerprints, and all three must be registered in both Firebase and the Cloud Console:**
+
+| SHA-1 | Key | Covers |
+|---|---|---|
+| `c10e2cbe…` | debug | `flutter run` |
+| `f0b834eb…` | upload | locally built release APK |
+| `9fc97294…` | **Play app signing** | anything installed from Play |
+
+Find the third at **Protected with Play → Play Store protection → Manage Play app signing → App signing key → Classical key → SHA-1**. ⚠️ That page also shows the *upload* key certificate lower down in a near-identical layout, and the two are trivially easy to confuse — this cost a round trip. Take the **Classical** column, not Post-quantum.
+
+⚠️ **`UNREGISTERED_ON_API_CONSOLE` is a different failure from the 2026-08-09 API-key block**, though both present as a dead sign-in button. Diagnose by reading logcat, not by guessing:
+- API-key restriction → `Requests from this Android client application … are blocked`
+- Missing OAuth client → `This android application is not registered to use OAuth2.0` + `status=UNREGISTERED_ON_API_CONSOLE`
+
+⚠️ **A newly registered OAuth client takes hours to propagate** — far longer than the ~5 minutes an API-key restriction needs. As of 2026-08-17 00:45 the Play build still failed with `UNREGISTERED_ON_API_CONSOLE` while `flutter run` signed in fine, which is the expected shape of "registered but not yet live" rather than a misconfiguration. **Unverified: whether the Play build signs in once propagation completes.**
 
 Beyond those it is store-listing work — icon, feature graphic, screenshots, description, content rating, data-safety form (the Privacy Policy above lists what to declare).
