@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delete Your Account — CookMate AI</title>
+<style>
+  :root {
+    --brand: #8B5E3C;
+    --bg: #F6F2EE;
+    --surface: #FFFFFF;
+    --text: #2E2E2E;
+    --muted: #7A7A7A;
+    --border: #E0E0E0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --brand: #C89468;
+      --bg: #17120F;
+      --surface: #211A16;
+      --text: #F2EBE4;
+      --muted: #B3A79C;
+      --border: #3C322B;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main {
+    max-width: 46rem;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2.5rem;
+  }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; color: var(--brand); }
+  h2 { font-size: 1.2rem; margin: 2.25rem 0 .6rem; }
+  .updated { color: var(--muted); font-size: .9rem; margin: 0 0 2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95rem; }
+  th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--brand); }
+  ul { padding-left: 1.2rem; }
+  ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  a { color: var(--brand); }
+  code { background: var(--bg); padding: .1rem .35rem; border-radius: 4px; font-size: .9em; }
+  .note { border-left: 3px solid var(--brand); padding: .1rem 0 .1rem 1rem; margin: 1.25rem 0; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Delete Your Account</h1>
+<p class="updated">CookMate AI · Last updated 17 August 2026</p>
+
+<p>
+  This page explains how to permanently delete your CookMate AI
+  (<code>com.urooj.cookmate</code>) account and the data attached to it.
+  CookMate AI is an independently developed Android application by Urooj Shehzadi.
+</p>
+
+<h2>Option 1 — delete it yourself, inside the app</h2>
+
+<p>This is immediate and does not require anyone's approval.</p>
+
+<ol>
+  <li>Open <strong>CookMate AI</strong> and sign in.</li>
+  <li>Go to the <strong>Profile</strong> tab.</li>
+  <li>Open <strong>Settings</strong>, then tap <strong>Delete Account</strong>
+      under the Account section. (You can also reach it from the Account menu
+      on the Profile screen.)</li>
+  <li>Type <strong>DELETE</strong> in the confirmation field.</li>
+  <li>Confirm who you are — enter your password, or sign in with Google again
+      if you registered with a Google account. This step is required by
+      Firebase for security and cannot be skipped.</li>
+  <li>Tap the delete button. Your data is erased and you are signed out.</li>
+</ol>
+
+<div class="note">
+  The deletion runs immediately. It cannot be undone, and there is no grace
+  period during which the account can be recovered.
+</div>
+
+<h2>Option 2 — ask us to delete it</h2>
+
+<p>
+  If you can no longer install or sign in to the app, email
+  <strong>uroojshehzadi03@gmail.com</strong> from the address you registered
+  with, using the subject line <strong>Delete my CookMate AI account</strong>.
+</p>
+
+<p>
+  We reply within 30 days. We may ask you to confirm the request from the
+  registered email address before acting on it, so that nobody else can delete
+  your account.
+</p>
+
+<h2>What is deleted</h2>
+
+<p>Everything below is erased permanently:</p>
+
+<table>
+  <tr><th>Data</th><th>Where it lived</th></tr>
+  <tr><td>Your account — email address and sign-in credentials</td><td>Firebase Authentication</td></tr>
+  <tr><td>Display name and profile picture</td><td>Your user document</td></tr>
+  <tr><td>Favourite recipes</td><td><code>favorites</code></td></tr>
+  <tr><td>AI-generated and saved recipes</td><td><code>generatedRecipes</code></td></tr>
+  <tr><td>AI chat conversations and every message in them</td><td><code>chats</code></td></tr>
+  <tr><td>AI usage records (token counts per request)</td><td><code>usage</code></td></tr>
+</table>
+
+<p>
+  Your profile picture is stored inside your user document rather than in
+  separate file storage, so it is removed along with everything else.
+</p>
+
+<h2>What is kept, and for how long</h2>
+
+<table>
+  <tr><th>Data</th><th>Retention</th></tr>
+  <tr>
+    <td>Crash reports (Firebase Crashlytics)</td>
+    <td>
+      Kept up to 90 days by Google, then deleted automatically. These are
+      diagnostic traces — they are not linked to your name or email address and
+      cannot be used to identify you after your account is gone.
+    </td>
+  </tr>
+  <tr>
+    <td>Prompts you sent to the AI assistant</td>
+    <td>
+      Your copy of every conversation is deleted with your account. However,
+      prompts were processed by <strong>Google's Gemini API</strong> when you
+      sent them, and that processing is governed by Google's own retention
+      policy — we cannot delete data held on Google's servers on your behalf.
+    </td>
+  </tr>
+  <tr>
+    <td>Notification records stored on your device</td>
+    <td>
+      Held only in the app's local storage. They are removed when you uninstall
+      the app or clear its data; they are never uploaded.
+    </td>
+  </tr>
+</table>
+
+<div class="note">
+  Deleting your account does not uninstall the app. To remove it completely,
+  uninstall CookMate AI from your device after deleting your account.
+</div>
+
+<h2>Questions</h2>
+<p>
+  Contact <strong>uroojshehzadi03@gmail.com</strong>. See also our
+  <a href="privacy-policy.html">Privacy Policy</a> and
+  <a href="terms.html">Terms of Service</a>.
+</p>
+
+</main>
+</body>
+</html>
