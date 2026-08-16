@@ -86,6 +86,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "845885648760-n1n6i80f2df45uul4q383014983es1li.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.urooj.cookmate",
+            "certificate_hash": "9fc972943a55086e0a5e84f6778fd5184fce3a36"
+          }
+        },
+        {
           "client_id": "845885648760-pioaf2q0ejhiudu3mhou4fpg6hdv650v.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
