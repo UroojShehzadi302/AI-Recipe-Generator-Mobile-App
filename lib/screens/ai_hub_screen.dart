@@ -245,7 +245,13 @@ class _GenerateViewState extends State<_GenerateView> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final recipeProvider = context.read<RecipeProvider>();
-    final recipe = await recipeProvider.generate(_controller.text.trim());
+    // Signed-in generations are filed in Usage History; signed-out ones simply
+    // have nowhere to go, and still produce a recipe.
+    final String? uid = context.read<AuthProvider>().user?.uid;
+    final recipe = await recipeProvider.generate(
+      _controller.text.trim(),
+      uid: uid,
+    );
     if (!mounted) return;
 
     if (recipe != null) {

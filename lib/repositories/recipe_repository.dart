@@ -446,6 +446,53 @@ class RecipeRepository {
     }
   }
 
+  /// Records that [recipe] was generated from [prompt], without keeping it.
+  ///
+  /// Usage History is meant to answer "what have I asked for?", and until this
+  /// existed it could not: only [saveRecipe] wrote anything, so a user who
+  /// generated ten recipes and kept none saw an empty screen — while the
+  /// screen, and the Play listing, both promised every generation.
+  ///
+  /// Shares [saveRecipe]'s document id and shape, so a later save **upgrades**
+  /// this row to `status: 'saved'` rather than creating a second one. The
+  /// `status` written here is deliberately not merged over an existing
+  /// `'saved'` — see the read below.
+  ///
+  /// ⚠️ Best-effort by design: a bookkeeping write must never turn a good AI
+  /// response into a user-visible error, so failures are swallowed. Same
+  /// reasoning as `UsageRepository.record`.
+  Future<void> recordGeneration(
+    String uid,
+    Recipe recipe, {
+    String? prompt,
+  }) async {
+    try {
+      final String id = favoriteDocId(recipe);
+      final String path = '${_generatedPath(uid)}/$id';
+
+      // Never downgrade a kept recipe back to 'generated' — re-generating
+      // something already saved must not silently unsave it.
+      final Map<String, dynamic>? existing = await _firestore.getDoc(path);
+      final bool alreadySaved = existing?['status'] == 'saved';
+
+      final Map<String, dynamic> data = <String, dynamic>{
+        'genId': id,
+        'recipe': recipe.toJson(),
+        'sourceType': recipe.sourceType,
+        if (!alreadySaved) 'status': 'generated',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+      if (prompt != null && prompt.trim().isNotEmpty) {
+        data['prompt'] = prompt.trim();
+      }
+      await _firestore.setDoc(path, data, merge: true);
+    } catch (_) {
+      // Swallowed on purpose. History is a convenience; the recipe the user
+      // just asked for is already on screen and must not be interrupted by a
+      // failed write.
+    }
+  }
+
   /// Removes a kept recipe from `users/{uid}/generatedRecipes`.
   ///
   /// [genId] is the deterministic id from [favoriteDocId]. Deleting also

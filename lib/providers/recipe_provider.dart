@@ -14,6 +14,8 @@
 // Only `flutter/foundation` (for [ChangeNotifier]) and project files are
 // imported.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/constants/app_strings.dart';
@@ -249,7 +251,11 @@ class RecipeProvider extends ChangeNotifier {
   /// [UnimplementedError]; this method catches it and settles into an `error`
   /// state with a friendly "AI generation coming soon" message rather than
   /// crashing. Returns the generated [Recipe] on success, otherwise `null`.
-  Future<Recipe?> generate(String prompt) async {
+  /// [uid] records the generation in Usage History. Optional so signed-out
+  /// generation still works — there is simply nowhere to file it. The write is
+  /// fire-and-forget: history is a convenience, and awaiting it would make a
+  /// Firestore round-trip stand between the user and the recipe they asked for.
+  Future<Recipe?> generate(String prompt, {String? uid}) async {
     _genStatus = LoadStatus.loading;
     _genError = null;
     notifyListeners();
@@ -262,6 +268,11 @@ class RecipeProvider extends ChangeNotifier {
       _lastPrompt = prompt.trim();
       _genStatus = LoadStatus.loaded;
       notifyListeners();
+      if (uid != null && uid.isNotEmpty) {
+        unawaited(
+          _repository.recordGeneration(uid, recipe, prompt: prompt.trim()),
+        );
+      }
       return recipe;
     } on UnimplementedError {
       // "Not wired yet" — a code state, not a network one. Report nothing.
