@@ -13,6 +13,7 @@
 import 'package:ai_recipe_generator/core/error/error_mapper.dart';
 import 'package:ai_recipe_generator/core/widgets/error_snack_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -123,18 +124,7 @@ void main() {
   });
 
   group('showErrorSnackBar', () {
-    // `SnackBar(content: Text(msg))` clips to one line and ellipsises the
-    // rest, which would eat the "Details:" line entirely — the whole reason
-    // withDetail exists. This pins that the detail survives to the screen.
-    testWidgets('renders a multi-line diagnostic message in full',
-        (WidgetTester tester) async {
-      final String message = ErrorMapper.withDetail(
-        "This app build isn't authorised to reach the server yet.",
-        'Requests from this Android client application com.urooj.cookmate '
-            'are blocked.',
-        'internal-error',
-      );
-
+    Future<void> pumpWith(WidgetTester tester, String message) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -147,47 +137,77 @@ void main() {
           ),
         ),
       );
-
       await tester.tap(find.text('fail'));
       await tester.pumpAndSettle();
+    }
 
-      expect(find.byType(SnackBar), findsOneWidget);
-
-      final Text content = tester.widget<Text>(
-        find.descendant(
-          of: find.byType(SnackBar),
-          matching: find.textContaining('are blocked'),
-        ),
+    // The bug this group exists for. A SnackBar is bounded by its own width
+    // and the screen, so the first attempt at this feature still truncated on
+    // a real device at "...Android client application co..." — dropping the
+    // package name, which is the identifying half of the whole string.
+    testWidgets('shows the full provider text, untruncated, for a long error',
+        (WidgetTester tester) async {
+      final String message = ErrorMapper.withDetail(
+        "This app build isn't authorised to reach the server yet.",
+        'An internal error has occurred. [ Requests from this Android client '
+            'application com.urooj.cookmate are blocked. ]',
+        'internal-error',
       );
-      expect(content.maxLines, greaterThan(1));
-      expect(content.data, contains("isn't authorised"));
-      expect(content.data, contains('(internal-error)'));
+
+      await pumpWith(tester, message);
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      final SelectableText body = tester.widget<SelectableText>(
+        find.byType(SelectableText),
+      );
+      final String shown = body.data ?? '';
+      // The tail of the message is what a SnackBar ate; assert it survives.
+      expect(shown, contains('com.urooj.cookmate'));
+      expect(shown, contains('are blocked'));
+      expect(shown, contains('(internal-error)'));
+      expect(shown, isNot(contains('…')));
+      expect(shown, isNot(contains('...')));
     });
 
-    testWidgets('offers a dismiss action only for the long messages',
+    testWidgets('offers Copy, so the text can reach a bug report intact',
         (WidgetTester tester) async {
-      Future<void> pumpWith(String message) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Builder(
-                builder: (BuildContext context) => ElevatedButton(
-                  onPressed: () => showErrorSnackBar(context, message),
-                  child: const Text('fail'),
-                ),
-              ),
-            ),
-          ),
-        );
-        await tester.tap(find.text('fail'));
-        await tester.pumpAndSettle();
-      }
+      const String message = 'Short.\n\nDetails: something long. (code)';
+      final List<MethodCall> clipboardCalls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') clipboardCalls.add(call);
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
 
-      await pumpWith('Incorrect password. (wrong-password)');
-      expect(find.text('Dismiss'), findsNothing);
+      await pumpWith(tester, message);
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
 
-      await pumpWith('Short.\n\nDetails: something long. (code)');
-      expect(find.text('Dismiss'), findsOneWidget);
+      expect(clipboardCalls, hasLength(1));
+      expect(
+        (clipboardCalls.single.arguments as Map<Object?, Object?>)['text'],
+        message,
+        reason: 'the copy must be the whole message, not the visible part',
+      );
+    });
+
+    testWidgets('keeps a short error as a lightweight SnackBar',
+        (WidgetTester tester) async {
+      await pumpWith(tester, 'Incorrect password. (wrong-password)');
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.byType(AlertDialog),
+        findsNothing,
+        reason: 'a mistyped password does not deserve a modal dialog',
+      );
     });
   });
 }
