@@ -6,6 +6,7 @@ import '../core/theme/app_dimensions.dart';
 import '../core/theme/app_text_styles.dart';
 import '../core/utils/validators.dart';
 import '../core/widgets/app_text_field.dart';
+import '../core/widgets/error_snack_bar.dart';
 import '../core/widgets/primary_button.dart';
 import '../providers/auth_provider.dart';
 
@@ -49,7 +50,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     final error = auth.errorMessage;
     if (error != null) {
-      _showSnackBar(error);
+      // Errors go through the shared error SnackBar, which survives a
+      // multi-line diagnostic message; the success case below stays a plain
+      // neutral SnackBar rather than being tinted like a failure.
+      showErrorSnackBar(context, error);
       auth.clearError();
       return;
     }

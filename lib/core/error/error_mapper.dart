@@ -104,6 +104,30 @@ class ErrorMapper {
     return '$message ($trimmed)';
   }
 
+  /// Builds `message` + `Details: <raw> (code)` for a user-facing error box.
+  ///
+  /// The friendly sentence tells the user what to do; the raw provider text
+  /// below it is what makes a screenshot diagnosable. Both matter, and picking
+  /// one loses something: the plain sentence alone sent us to logcat on
+  /// 2026-08-17, and the raw string alone reads as a crash to a user who just
+  /// mistyped a password.
+  ///
+  /// [detail] is the provider's own message — `e.message` from a
+  /// `FirebaseAuthException`, say. It is dropped when absent, blank, or merely
+  /// a repeat of [message], so the common cases stay clean.
+  ///
+  /// ⚠️ Only ever pass a provider-authored string here. The caller controls
+  /// what reaches the screen, and an email, token, or password appended to a
+  /// visible error box would leak it to anyone looking over the user's
+  /// shoulder — and to every screenshot they send on.
+  static String withDetail(String message, String? detail, String? code) {
+    final String raw = detail?.trim() ?? '';
+    if (raw.isEmpty || raw == message.trim()) {
+      return withCode(message, code);
+    }
+    return '$message\n\nDetails: ${withCode(raw, code)}';
+  }
+
   /// Translates an AI / Cloud Functions error [code] into a friendly message.
   ///
   /// Recognized codes include `deadline-exceeded`/`timeout`,

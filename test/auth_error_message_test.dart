@@ -11,6 +11,8 @@
 // code so a screenshot is enough to identify the failure.
 
 import 'package:ai_recipe_generator/core/error/error_mapper.dart';
+import 'package:ai_recipe_generator/core/widgets/error_snack_bar.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -27,6 +29,48 @@ void main() {
       expect(ErrorMapper.withCode(message, null), message);
       expect(ErrorMapper.withCode(message, ''), message);
       expect(ErrorMapper.withCode(message, '   '), message);
+    });
+  });
+
+  group('ErrorMapper.withDetail', () {
+    test('keeps the provider text, which is the part worth screenshotting', () {
+      final String out = ErrorMapper.withDetail(
+        "This app build isn't authorised to reach the server yet.",
+        'An internal error has occurred. [ Requests from this Android client '
+            'application com.urooj.cookmate are blocked. ]',
+        'internal-error',
+      );
+      expect(out, contains("isn't authorised"));
+      expect(out, contains('are blocked'));
+      expect(out, contains('com.urooj.cookmate'));
+      expect(out, contains('(internal-error)'));
+      expect(out, contains('Details:'));
+    });
+
+    test('degrades to just the code when there is no detail', () {
+      expect(
+        ErrorMapper.withDetail('Incorrect password.', null, 'wrong-password'),
+        'Incorrect password. (wrong-password)',
+      );
+      expect(
+        ErrorMapper.withDetail('Incorrect password.', '  ', 'wrong-password'),
+        'Incorrect password. (wrong-password)',
+      );
+    });
+
+    test('does not repeat the message back when the detail duplicates it', () {
+      const String message = 'Network error. Please try again.';
+      expect(
+        ErrorMapper.withDetail(message, message, 'network-request-failed'),
+        '$message (network-request-failed)',
+      );
+    });
+
+    test('puts the detail on its own line so a one-line box cannot hide it',
+        () {
+      final String out = ErrorMapper.withDetail('Short.', 'Long raw.', 'code');
+      expect(out, contains('\n'));
+      expect(out.split('\n').first, 'Short.');
     });
   });
 
@@ -75,6 +119,75 @@ void main() {
         'Exception: FirebaseError at package:firebase_auth/foo.dart:42',
       );
       expect(message, 'Something went wrong. Please try again.');
+    });
+  });
+
+  group('showErrorSnackBar', () {
+    // `SnackBar(content: Text(msg))` clips to one line and ellipsises the
+    // rest, which would eat the "Details:" line entirely — the whole reason
+    // withDetail exists. This pins that the detail survives to the screen.
+    testWidgets('renders a multi-line diagnostic message in full',
+        (WidgetTester tester) async {
+      final String message = ErrorMapper.withDetail(
+        "This app build isn't authorised to reach the server yet.",
+        'Requests from this Android client application com.urooj.cookmate '
+            'are blocked.',
+        'internal-error',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (BuildContext context) => ElevatedButton(
+                onPressed: () => showErrorSnackBar(context, message),
+                child: const Text('fail'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('fail'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+
+      final Text content = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.textContaining('are blocked'),
+        ),
+      );
+      expect(content.maxLines, greaterThan(1));
+      expect(content.data, contains("isn't authorised"));
+      expect(content.data, contains('(internal-error)'));
+    });
+
+    testWidgets('offers a dismiss action only for the long messages',
+        (WidgetTester tester) async {
+      Future<void> pumpWith(String message) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (BuildContext context) => ElevatedButton(
+                  onPressed: () => showErrorSnackBar(context, message),
+                  child: const Text('fail'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('fail'));
+        await tester.pumpAndSettle();
+      }
+
+      await pumpWith('Incorrect password. (wrong-password)');
+      expect(find.text('Dismiss'), findsNothing);
+
+      await pumpWith('Short.\n\nDetails: something long. (code)');
+      expect(find.text('Dismiss'), findsOneWidget);
     });
   });
 }

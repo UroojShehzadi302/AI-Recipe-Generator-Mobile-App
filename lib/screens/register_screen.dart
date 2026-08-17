@@ -10,6 +10,7 @@ import '../core/theme/app_shadows.dart';
 import '../core/theme/app_text_styles.dart';
 import '../core/utils/validators.dart';
 import '../core/widgets/app_text_field.dart';
+import '../core/widgets/error_snack_bar.dart';
 import '../core/widgets/google_button.dart';
 import '../core/widgets/or_divider.dart';
 import '../core/widgets/primary_button.dart';
@@ -80,11 +81,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // Cancelled sign-in leaves status idle with no error — do nothing.
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
+  void _showError(String message) => showErrorSnackBar(context, message);
 
   @override
   Widget build(BuildContext context) {

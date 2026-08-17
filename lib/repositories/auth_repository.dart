@@ -451,12 +451,17 @@ class AuthRepository {
     }
     if (message.contains('are blocked') ||
         message.contains('not registered to use OAuth')) {
-      return ErrorMapper.withCode(
+      return ErrorMapper.withDetail(
         ErrorMapper.authMessage('app-not-authorized'),
-        'blocked-client',
+        message,
+        e.code,
       );
     }
-    return ErrorMapper.withCode(ErrorMapper.authMessage(e.code), e.code);
+    return ErrorMapper.withDetail(
+      ErrorMapper.authMessage(e.code),
+      message,
+      e.code,
+    );
   }
 
   /// Maps a non-cancellation [GoogleSignInException] to a friendly message,
@@ -472,7 +477,7 @@ class AuthRepository {
         'Google sign-in is unavailable right now. Please try again.',
       _ => 'Google sign-in failed. Please try again.',
     };
-    return ErrorMapper.withCode(message, e.code.name);
+    return ErrorMapper.withDetail(message, e.description, e.code.name);
   }
 
   /// Returns the stored [UserModel] for [user], creating a minimal one if the
