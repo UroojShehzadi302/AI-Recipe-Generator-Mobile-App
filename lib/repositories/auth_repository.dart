@@ -390,9 +390,32 @@ class AuthRepository {
       return _ensureUserProfile(user, provider: 'google');
     } on GoogleSignInException catch (e, s) {
       // A user-driven dismissal is not an error — signal it with null.
+      //
+      // ⚠️ But `canceled` is NOT proof the user dismissed anything. Play
+      // Services reports a *rejected* sign-in with the same code once the
+      // account chooser has already closed, so an unregistered signing
+      // certificate looks exactly like a change of mind. On 2026-08-17 that
+      // made the Play build die in total silence after picking an account —
+      // no dialog, no log, nothing to search for.
+      //
+      // The description is what separates them: a real dismissal carries none,
+      // while a rejection carries the provider's reason. Report either way, so
+      // the next silent death leaves a trace; only stay silent in the UI.
       if (e.code == GoogleSignInExceptionCode.canceled ||
           e.code == GoogleSignInExceptionCode.interrupted) {
-        return null;
+        final String reason = e.description?.trim() ?? '';
+        if (reason.isEmpty) {
+          _reportAuthFailure('google sign-in dismissed: ${e.code.name}', e, s);
+          return null;
+        }
+        // Reported as "cancelled" but with a reason attached — the provider
+        // refused. Surface it rather than pretending the user walked away.
+        _reportAuthFailure(
+          'google sign-in refused as ${e.code.name}: $reason',
+          e,
+          s,
+        );
+        throw AuthFailure(_googleFailureMessage(e));
       }
       _reportAuthFailure(
         'google sign-in: ${e.code.name} — ${e.details}',
