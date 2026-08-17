@@ -16,6 +16,7 @@ import '../core/error/error_mapper.dart';
 import '../core/error/failure.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/crash_reporter.dart';
 import 'user_repository.dart';
 
 /// Coordinates sign-in/registration with user-profile storage.
@@ -86,11 +87,13 @@ class AuthRepository {
         throw const AuthFailure();
       }
       return _ensureUserProfile(user);
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, s) {
+      _reportAuthFailure('sign-in: ${e.code}', e, s);
       throw AuthFailure(_authFailureMessage(e));
     } on Failure {
       rethrow;
-    } catch (e) {
+    } catch (e, s) {
+      _reportAuthFailure('sign-in unexpected: ${e.runtimeType}', e, s);
       throw UnknownFailure(ErrorMapper.generic(e));
     }
   }
@@ -136,11 +139,13 @@ class AuthRepository {
       }
 
       return model;
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, s) {
+      _reportAuthFailure('register: ${e.code}', e, s);
       throw AuthFailure(_authFailureMessage(e));
     } on Failure {
       rethrow;
-    } catch (e) {
+    } catch (e, s) {
+      _reportAuthFailure('register unexpected: ${e.runtimeType}', e, s);
       throw UnknownFailure(ErrorMapper.generic(e));
     }
   }
@@ -383,60 +388,91 @@ class AuthRepository {
         throw const AuthFailure();
       }
       return _ensureUserProfile(user, provider: 'google');
-    } on GoogleSignInException catch (e) {
+    } on GoogleSignInException catch (e, s) {
       // A user-driven dismissal is not an error — signal it with null.
       if (e.code == GoogleSignInExceptionCode.canceled ||
           e.code == GoogleSignInExceptionCode.interrupted) {
         return null;
       }
-      if (kDebugMode) {
-        debugPrint('Google sign-in failed: code=${e.code} details=${e.details}');
-      }
+      _reportAuthFailure(
+        'google sign-in: ${e.code.name} — ${e.details}',
+        e,
+        s,
+      );
       throw AuthFailure(_googleFailureMessage(e));
-    } on FirebaseAuthException catch (e) {
-      if (kDebugMode) {
-        debugPrint('Google sign-in Firebase error: ${e.code} — ${e.message}');
-      }
+    } on FirebaseAuthException catch (e, s) {
+      _reportAuthFailure('google sign-in firebase: ${e.code}', e, s);
       throw AuthFailure(_authFailureMessage(e));
     } on Failure {
       rethrow;
-    } catch (e) {
-      // The generic mapper collapses everything into "something went wrong",
-      // which is right for users and useless for diagnosis — an OAuth
-      // misconfiguration looks identical to a dead network. Log the real cause.
-      if (kDebugMode) {
-        debugPrint('Google sign-in unexpected error (${e.runtimeType}): $e');
-      }
+    } catch (e, s) {
+      _reportAuthFailure('google sign-in unexpected: ${e.runtimeType}', e, s);
       throw UnknownFailure(ErrorMapper.generic(e));
     }
+  }
+
+  /// Records an auth failure to the crash reporter, and prints it in debug.
+  ///
+  /// Auth is the one path where a misconfiguration is indistinguishable from a
+  /// dead network at the UI, and the interesting failures are exactly the ones
+  /// that only reproduce on a *release* build — a Play-signed install rejected
+  /// by an API-key restriction, say. Those were previously invisible without a
+  /// USB cable and `adb logcat`, which cost most of a day on 2026-08-17.
+  ///
+  /// Reported non-fatally: the user sees a handled error and the app keeps
+  /// running, so filing it as a crash would misrepresent it. [CrashReporter]
+  /// swallows its own failures, so this cannot turn a login error into a
+  /// second one.
+  ///
+  /// ⚠️ Never pass an email, password, or token here — Crashlytics is not a
+  /// place for user data. Codes and type names only.
+  void _reportAuthFailure(String context, Object error, StackTrace stack) {
+    if (kDebugMode) debugPrint('[auth] $context: $error');
+    CrashReporter.logSafely('auth failure — $context');
+    CrashReporter.recordErrorSafely(error, stack);
   }
 
   /// Maps a [FirebaseAuthException] to a friendly message, special-casing the
   /// `CONFIGURATION_NOT_FOUND` internal error (raw `code == 'unknown'`) that
   /// Firebase returns when Email/Password sign-in is not enabled for the
   /// project.
+  /// The message carries the raw code so a screenshot is enough to diagnose —
+  /// see [ErrorMapper.withCode] for why that is worth the small ugliness.
+  ///
+  /// `app-not-authorized` and `internal-error` both surface as a blocked
+  /// client. Firebase reports the blocked-client rejection as a bare
+  /// `internal-error` whose *message* names the real cause, so the message is
+  /// inspected rather than trusted to the code alone.
   String _authFailureMessage(FirebaseAuthException e) {
     final String message = e.message ?? '';
     if (e.code == 'unknown' && message.contains('CONFIGURATION_NOT_FOUND')) {
       return 'Email/Password sign-in is not enabled for this Firebase project. '
           'Enable it in the console: Authentication → Sign-in method.';
     }
-    return ErrorMapper.authMessage(e.code);
+    if (message.contains('are blocked') ||
+        message.contains('not registered to use OAuth')) {
+      return ErrorMapper.withCode(
+        ErrorMapper.authMessage('app-not-authorized'),
+        'blocked-client',
+      );
+    }
+    return ErrorMapper.withCode(ErrorMapper.authMessage(e.code), e.code);
   }
 
-  /// Maps a non-cancellation [GoogleSignInException] to a friendly message.
+  /// Maps a non-cancellation [GoogleSignInException] to a friendly message,
+  /// with the code appended for the same reason as [_authFailureMessage].
   String _googleFailureMessage(GoogleSignInException e) {
-    switch (e.code) {
-      case GoogleSignInExceptionCode.clientConfigurationError:
-      case GoogleSignInExceptionCode.providerConfigurationError:
-        return 'Google sign-in is not configured for this app yet. '
+    final String message = switch (e.code) {
+      GoogleSignInExceptionCode.clientConfigurationError ||
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        'Google sign-in is not configured for this app yet. '
             'Enable the Google provider and add the SHA-1 in the Firebase '
-            'console.';
-      case GoogleSignInExceptionCode.uiUnavailable:
-        return 'Google sign-in is unavailable right now. Please try again.';
-      default:
-        return 'Google sign-in failed. Please try again.';
-    }
+            'console.',
+      GoogleSignInExceptionCode.uiUnavailable =>
+        'Google sign-in is unavailable right now. Please try again.',
+      _ => 'Google sign-in failed. Please try again.',
+    };
+    return ErrorMapper.withCode(message, e.code.name);
   }
 
   /// Returns the stored [UserModel] for [user], creating a minimal one if the

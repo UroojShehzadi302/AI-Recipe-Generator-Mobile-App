@@ -66,9 +66,42 @@ class ErrorMapper {
       case 'configuration-not-found':
         return 'Email sign-up is not enabled for this app yet. '
             'Enable Email/Password in the Firebase console.';
+      case 'app-not-authorized':
+      case 'internal-error':
+        // Google rejected the request before processing it — almost always
+        // this build's signing certificate is not registered against the API
+        // key (Cloud Console → the key restricted to "Android apps") or its
+        // OAuth client. It bites hardest on a Play-installed build, because
+        // Play App Signing re-signs with a certificate that neither the debug
+        // nor the upload key covers. Newly added fingerprints also take hours
+        // to propagate, so "registered" and "working" are different moments.
+        return "This app build isn't authorised to reach the server yet. "
+            'If you just installed an update, try again shortly.';
       default:
         return _fallback;
     }
+  }
+
+  /// Appends [code] to [message] so a user-facing error stays reportable.
+  ///
+  /// Every branch above deliberately hides the raw cause, which is right for
+  /// users and useless for diagnosis: on 2026-08-17 a Play-signed build showed
+  /// "Something went wrong" for a blocked-client rejection, and finding the
+  /// real reason took a USB cable and `adb logcat`. A short code in the corner
+  /// of the message costs the user nothing and lets a bug report name the
+  /// failure.
+  ///
+  /// Codes are already opaque identifiers (`internal-error`, `weak-password`),
+  /// never secrets or user data, so they are safe to show.
+  ///
+  /// ```dart
+  /// ErrorMapper.withCode('That email looks invalid.', 'invalid-email');
+  /// // 'That email looks invalid. (invalid-email)'
+  /// ```
+  static String withCode(String message, String? code) {
+    final String trimmed = code?.trim() ?? '';
+    if (trimmed.isEmpty) return message;
+    return '$message ($trimmed)';
   }
 
   /// Translates an AI / Cloud Functions error [code] into a friendly message.
